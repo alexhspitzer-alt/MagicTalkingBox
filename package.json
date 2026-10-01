@@ -1,0 +1,33 @@
+{
+  "name": "magictalkingbox",
+  "version": "0.1.0",
+  "description": "A local WebGPU AI workstation with offline model and app caching",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexhspitzer-alt/MagicTalkingBox.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/alexhspitzer-alt/MagicTalkingBox/issues"
+  },
+  "homepage": "https://github.com/alexhspitzer-alt/MagicTalkingBox#readme",
+  "dependencies": {
+    "@mlc-ai/web-llm": "0.2.85"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@webgpu/types": "0.1.74",
+    "typescript": "7.0.2",
+    "vite": "8.3.2"
+  },
+  "private": true
+}

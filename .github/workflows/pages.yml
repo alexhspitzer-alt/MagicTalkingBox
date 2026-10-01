@@ -1,0 +1,61 @@
+name: Build and deploy workstation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check whether GitHub Pages is enabled
+        id: pages
+        uses: actions/github-script@v8
+        with:
+          script: |
+            try {
+              const { data } = await github.request('GET /repos/{owner}/{repo}/pages', context.repo);
+              if (data.build_type !== 'workflow') {
+                core.notice('Select GitHub Actions in Settings → Pages → Source, then rerun this workflow.');
+                core.setOutput('enabled', 'false');
+              } else {
+                core.setOutput('enabled', 'true');
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.notice('Enable hosting in Settings → Pages → Source → GitHub Actions, then rerun this workflow.');
+              core.setOutput('enabled', 'false');
+            }
+      - uses: actions/configure-pages@v5
+        if: steps.pages.outputs.enabled == 'true'
+      - uses: actions/deploy-pages@v4
+        id: deployment
+        if: steps.pages.outputs.enabled == 'true'

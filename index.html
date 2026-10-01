@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111716" />
+  <meta name="description" content="A small local AI workstation. Download once, chat offline with your own GPU." />
+  <title>Magic Talking Box</title>
+</head>
+<body>
+  <main>
+    <header><span class="eyebrow">LOCAL AI WORKSTATION · V0.1</span><h1>Magic Talking Box<span class="cursor">_</span></h1><p>Your browser. Your GPU. Your conversation.</p></header>
+    <section class="panel" aria-label="Device and model">
+      <dl class="stats">
+        <div><dt>GPU / device</dt><dd id="gpu">Detecting…</dd></div>
+        <div><dt>Model</dt><dd id="model"></dd></div>
+        <div><dt>Model size</dt><dd id="size">360M parameters · 4-bit · ~194 MiB weights</dd></div>
+        <div><dt>Context</dt><dd>4,096 tokens</dd></div>
+        <div><dt>Generation speed</dt><dd id="speed">— tokens/s</dd></div>
+        <div><dt>Elapsed generation</dt><dd id="elapsed">0.0 s</dd></div>
+        <div><dt>Memory</dt><dd id="memory">GPU use unavailable</dd></div>
+        <div><dt>Connection</dt><dd id="network"></dd></div>
+      </dl>
+      <div class="setup"><button id="load" disabled>Load model</button><p id="status" role="status">Checking your device…</p></div>
+      <progress id="progress" max="1" value="0" hidden aria-label="Model loading progress"></progress>
+      <div class="storage"><span id="app-cache">App cache: checking…</span><span id="model-cache">Model cache: checking…</span><span id="persistence">Storage: checking…</span><span id="disk"></span></div>
+      <p id="offline-status" class="hint">First visit: load the model while online. Wait for offline readiness, then disconnect.</p>
+    </section>
+    <p id="error" role="alert" hidden></p>
+    <section class="panel terminal" aria-label="Local chat">
+      <div class="terminal-head"><span>CONVERSATION / LOCAL</span><button id="clear" class="secondary">New chat</button></div>
+      <div id="messages" aria-label="Conversation" aria-busy="false"><p class="empty">The box is quiet.<br><span>Load the model, then give it something to think about.</span></p></div>
+      <form id="chat"><label class="sr-only" for="prompt">Message</label><textarea id="prompt" rows="3" placeholder="Talk to the box…" disabled></textarea><div class="composer-bottom"><span class="hint">Enter sends · Shift + Enter adds a line</span><div><button id="stop" class="secondary" type="button" hidden>Stop</button><button id="send" disabled>Send ↗</button></div></div></form>
+    </section>
+    <footer>Inference stays on this device. Downloads come from Hugging Face and MLC.<br>Keep this tab visible during long generations. A small model can make mistakes.</footer>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
