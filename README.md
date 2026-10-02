@@ -26,6 +26,9 @@ saved images; New chat removes the saved conversation. Neither deletes weights.
 | Text | Qwen2.5 0.5B Instruct | 265 MiB | 4,096 tokens |
 | Text | Llama 3.2 1B Instruct | 663 MiB | 4,096 tokens |
 | Text | Qwen2.5 1.5B Instruct | 828 MiB | 4,096 tokens |
+| Text | Qwen2.5 3B Instruct | 1,656 MiB | 4,096 tokens |
+| Text | Llama 3.2 3B Instruct | 1,724 MiB | 4,096 tokens |
+| Text | Qwen2.5 7B Instruct | 4,086 MiB | 4,096 tokens |
 | Image | Stable Diffusion Turbo (default) | 2.34 GiB | 512 × 512; one diffusion step |
 | Image | Janus Pro 1B | 2.13 GiB | 384 × 384; 576 image tokens |
 | Image | Janus 1.3B | 2.13 GiB | 384 × 384; 576 image tokens |
@@ -36,6 +39,11 @@ heavier than the small text baseline. WebGPU support alone does not guarantee a
 model fits. Loading/allocation errors are shown explicitly.
 
 Text uses WebLLM 0.2.85 and prebuilt q4f32 models, with no shader-f16 requirement.
+The larger text models retain the 4,096-token context. Published GPU allocation
+estimates are about 2,894 MB for Qwen 3B, 2,952 MB for Llama 3B and 5,900 MB for
+Qwen 7B, plus browser overhead. Their download sizes are measured from the
+published weight manifests. Try a 3B model before 7B on phones; cached weights
+fitting on disk do not guarantee that a loaded model fits in device memory.
 Responses stream from a dedicated worker, with a 1,024 output token limit and no
 wall-clock timeout. Speed is WebLLM's actual decode-token statistic.
 

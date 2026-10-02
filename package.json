@@ -1,6 +1,6 @@
 {
   "name": "magictalkingbox",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local WebGPU AI workstation with offline model and app caching",
   "scripts": {
     "dev": "vite --host 0.0.0.0",

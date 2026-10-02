@@ -116,10 +116,20 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   const remote: string[] = [];
   page.on('request', request => { if (/huggingface|githubusercontent|jsdelivr/.test(request.url())) remote.push(request.url()); });
   await page.goto('./');
-  await expect(page.locator('#model-select option')).toHaveCount(4);
+  await expect(page.locator('#model-select option')).toHaveCount(7);
   await page.locator('#model-select').selectOption('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
   await expect(page.locator('#model')).toContainText('Qwen2.5 1.5B');
   await expect(page.locator('#size')).toContainText('828 MiB');
+  for (const [id, size, allocation] of [
+    ['Qwen2.5-3B-Instruct-q4f32_1-MLC', '1,656 MiB', '2,894 MB'],
+    ['Llama-3.2-3B-Instruct-q4f32_1-MLC', '1,724 MiB', '2,952 MB'],
+    ['Qwen2.5-7B-Instruct-q4f32_1-MLC', '4,086 MiB', '5,900 MB'],
+  ]) {
+    await page.locator('#model-select').selectOption(id);
+    await expect(page.locator('#size')).toContainText(size);
+    await expect(page.locator('#model-description')).toContainText(allocation);
+  }
+  await page.locator('#model-select').selectOption('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
   await page.locator('#mode-select').selectOption('image');
   await expect(page.locator('#model-select option')).toHaveCount(3);
   await expect(page.locator('#send')).toHaveText('Draw ↗');
