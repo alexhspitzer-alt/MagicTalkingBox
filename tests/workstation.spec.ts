@@ -14,6 +14,9 @@ test('app and saved chat survive an offline reload on a repository subpath', asy
   await page.goto('./');
   await expect(page.locator('#app-cache')).toHaveText('App cache: complete');
   await page.evaluate(() => localStorage.setItem('magic-talking-box.chat.v1', JSON.stringify([{ role: 'user', content: '<b>local history</b>' }, { role: 'assistant', content: 'Saved reply' }])));
+  // Model the browser connection signal as well as blocking network traffic.
+  // Some headless builds keep navigator.onLine=true under CDP emulation.
+  await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { get: () => false }));
   await context.setOffline(true);
   await page.reload();
   await expect(page.locator('h1')).toContainText('Magic Talking Box');
@@ -107,4 +110,107 @@ test('real cache loads the model after an offline page reload', async ({ page, c
   await expect(page.locator('#send')).toBeEnabled({ timeout: 300_000 });
   await expect(page.locator('#error')).toBeHidden();
   expect(remoteRequests).toBe(0);
+});
+
+test('model menus switch modes without downloading weights', async ({ page }) => {
+  const remote: string[] = [];
+  page.on('request', request => { if (/huggingface|githubusercontent|jsdelivr/.test(request.url())) remote.push(request.url()); });
+  await page.goto('./');
+  await expect(page.locator('#model-select option')).toHaveCount(4);
+  await page.locator('#model-select').selectOption('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
+  await expect(page.locator('#model')).toContainText('Qwen2.5 1.5B');
+  await expect(page.locator('#size')).toContainText('828 MiB');
+  await page.locator('#mode-select').selectOption('image');
+  await expect(page.locator('#model-select option')).toHaveCount(3);
+  await expect(page.locator('#send')).toHaveText('Draw ↗');
+  await expect(page.locator('#context')).toContainText('512 × 512');
+  await page.locator('#model-select').selectOption('janus-pro-1b');
+  await expect(page.locator('#context')).toContainText('576 image tokens');
+  await page.locator('#mode-select').selectOption('text');
+  await expect(page.locator('#model-select')).toHaveValue('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
+  await expect(page.locator('#send')).toBeDisabled();
+  expect(remote).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('image UI saves PNGs, restores offline, and releases the worker on model switching', async ({ page, context }) => {
+  // Exercise the worker protocol and storage with a tiny PNG; no AI inference.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'gpu', { value: { requestAdapter: async () => ({ info: { description: 'Test GPU' }, requestDevice: async () => ({ destroy() {} }) }) } });
+    let terminated = 0;
+    const OriginalWorker = window.Worker;
+    class ImageWorker extends EventTarget {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super();
+        if (!String(url).includes('image-worker-')) return new OriginalWorker(url, options);
+      }
+      postMessage(message: { id: number; type: string }) {
+        setTimeout(() => {
+          if (message.type === 'load') this.dispatchEvent(new MessageEvent('message', { data: { id: message.id, type: 'result' } }));
+          else {
+            const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDAAAAAAASUVORK5CYII='), c => c.charCodeAt(0));
+            this.dispatchEvent(new MessageEvent('message', { data: { id: message.id, type: 'result', result: { blob: new Blob([bytes], { type: 'image/png' }), seconds: 2 } } }));
+          }
+        }, 10);
+      }
+      terminate() { terminated++; (window as unknown as { terminatedWorkers: number }).terminatedWorkers = terminated; }
+    }
+    window.Worker = ImageWorker as unknown as typeof Worker;
+  });
+  await page.goto('./');
+  await expect(page.locator('#app-cache')).toHaveText('App cache: complete');
+  await page.locator('#mode-select').selectOption('image');
+  await page.locator('#load').click();
+  await expect(page.locator('#send')).toBeEnabled();
+  await page.locator('#prompt').fill('<b>a tiny drawing</b>');
+  await page.locator('#send').click();
+  await expect(page.locator('#status')).toHaveText('Ready. Image saved on this device.');
+  await expect(page.locator('.image-result img')).toHaveCount(1);
+  await expect(page.locator('.image-result b')).toHaveCount(0);
+  await expect(page.locator('.download')).toHaveAttribute('download', /\.png$/);
+  await page.locator('#model-select').selectOption('janus-pro-1b');
+  await expect(page.locator('#send')).toBeDisabled();
+  expect(await page.evaluate(() => (window as unknown as { terminatedWorkers: number }).terminatedWorkers)).toBe(1);
+  await context.setOffline(true); await page.reload();
+  await expect(page.locator('#mode-select')).toHaveValue('image');
+  await expect(page.locator('#model-select')).toHaveValue('janus-pro-1b');
+  await expect(page.locator('.image-result img')).toHaveCount(1);
+  await expect(page.locator('.image-result')).toContainText('<b>a tiny drawing</b>');
+  expect(await page.evaluate(async () => {
+    const name = (await caches.keys()).find(name => name.startsWith('magic-box-app-'))!;
+    const cache = await caches.open(name);
+    const keys = await cache.keys();
+    return ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm'].every(file => keys.some(key => key.url.endsWith('/ort/' + file)));
+  })).toBe(true);
+  await page.locator('#clear').click();
+  await expect(page.locator('.image-result')).toHaveCount(0);
+});
+
+test('selected image cache needs every artifact and the real image worker starts offline', async ({ page, context }) => {
+  await page.goto('./');
+  await expect(page.locator('#app-cache')).toHaveText('App cache: complete');
+  await page.evaluate(async () => {
+    const cache = await caches.open('magic-box-image-models-v1');
+    const url = 'https://huggingface.co/test/image.onnx';
+    await cache.put(new URL('/__magic-box__/image-manifest-sd-turbo.json', location.origin), Response.json({ urls: [url], bytes: 100 }));
+  });
+  await page.locator('#mode-select').selectOption('image');
+  await expect(page.locator('#model-cache')).toHaveText('Model cache: incomplete');
+  await page.evaluate(async () => {
+    await (await caches.open('magic-box-image-models-v1')).put('https://huggingface.co/test/image.onnx', new Response('tiny fixture'));
+  });
+  await context.setOffline(true); await page.reload();
+  await expect(page.locator('#model-cache')).toHaveText('Model cache: complete');
+  await expect(page.locator('#offline-status')).toContainText('Offline ready');
+  // A deliberately unknown model reports an error before downloads/GPU work.
+  expect(await page.evaluate(async () => {
+    const cache = await caches.open((await caches.keys()).find(key => key.startsWith('magic-box-app-'))!);
+    const url = (await cache.keys()).find(key => /\/assets\/image-worker-.*\.js$/.test(key.url))!.url;
+    return new Promise<string>((resolve, reject) => {
+      const worker = new Worker(url, { type: 'module' });
+      worker.onerror = () => { worker.terminate(); reject(Error('Image worker failed to start')); };
+      worker.onmessage = event => { worker.terminate(); resolve(event.data.error); };
+      worker.postMessage({ id: 1, type: 'load', model: 'unknown-test-model' });
+    });
+  })).toContain('Unknown model');
 });

@@ -1,4 +1,5 @@
-import { MODEL, MODEL_BASE } from './model';
+import { MODEL_ID } from './model';
+import { textModel, modelBase } from './text-model';
 export type Message = { role: 'user' | 'assistant'; content: string };
 const CHAT_KEY = 'magic-talking-box.chat.v1';
 
@@ -23,7 +24,8 @@ export async function storageInfo(requestPersistence = false) {
 // Verify EVERY shard plus the runtime, tokenizer and configuration before
 // promising offline reloads (hasModelInCache covers only the weight cache).
 // Cache names and URLs are checked against pinned WebLLM 0.2.85.
-export async function modelCacheInfo(): Promise<{ complete: boolean; bytes: number }> {
+export async function modelCacheInfo(id = MODEL_ID): Promise<{ complete: boolean; bytes: number }> {
+  const MODEL = textModel(id), MODEL_BASE = modelBase(id);
   if (!('caches' in globalThis)) return { complete: false, bytes: 0 };
   const weights = await caches.open('webllm/model');
   const manifest = await weights.match(new URL('tensor-cache.json', MODEL_BASE));
@@ -49,7 +51,7 @@ export async function cacheApp(): Promise<void> {
   if (!('serviceWorker' in navigator)) throw new Error('Service workers are unavailable. Offline page reloads cannot be enabled in this browser.');
   const registration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}service-worker.js`);
   // Await this registration, not an unrelated worker on another app's scope.
-  if (registration.active && navigator.serviceWorker.controller) return;
+  if (registration.active && navigator.serviceWorker.controller && !registration.installing && !registration.waiting) return;
   const worker = registration.installing || registration.waiting;
   if (worker) await new Promise<void>((resolve, reject) => {
     const check = () => {
@@ -59,7 +61,13 @@ export async function cacheApp(): Promise<void> {
     worker.addEventListener('statechange', check);
     check();
   });
-  if (!navigator.serviceWorker.controller) await new Promise<void>(resolve => {
-    navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+  if (!navigator.serviceWorker.controller || (worker && navigator.serviceWorker.controller !== worker)) await new Promise<void>(resolve => {
+    const check = () => {
+      if (navigator.serviceWorker.controller && (!worker || navigator.serviceWorker.controller === worker)) {
+        navigator.serviceWorker.removeEventListener('controllerchange', check); resolve();
+      }
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', check);
+    check();
   });
 }

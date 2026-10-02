@@ -1,92 +1,115 @@
 # Magic Talking Box
 
-A small browser AI workstation: **WebGPU inference, one local model, offline app
-and model caches, and a conversation saved on your device.** No backend, API key,
-account, inference service, or CPU fallback.
+A browser-local AI workstation with **text and drawing modes**, WebGPU inference,
+persistent model caches, saved conversations and a downloadable PNG gallery.
+No server-side inference, API key or account is required.
 
-## First milestone
+## Use it
 
-1. Open the hosted app using HTTPS in a browser with WebGPU support.
-2. Click **Load model** while online. The first download includes ~194 MiB of
-   weights plus the tokenizer and GPU runtime. Loading may take several minutes.
-3. Wait for **Offline ready**, with both app and model caches complete.
-4. Disconnect and chat. Reload the page offline, click **Load model** again, and
-   continue: the GPU must load the cached weights into memory, but no download is
-   needed. The conversation survives reloads.
+1. Open https://alexhspitzer-alt.github.io/MagicTalkingBox/ on a WebGPU device.
+2. Choose **Text / chat** or **Image / drawing**, then a model.
+3. Click **Load model** while online. Only the selected model downloads.
+4. Wait for **Offline ready**, with both app and selected-model caches complete.
+5. Disconnect and generate. After an offline reload, click **Load model** to load
+   cached weights back into GPU memory. Conversations and images survive reloads.
 
-Browser storage is scoped to the origin and browser profile. The app requests
-persistent storage from the load-button gesture and reports whether the browser
-grants it. When persistence is denied, the cache is best effort and can be evicted
-under storage pressure. Clearing site data or using another browser/profile needs
-a new download. Private browsing may block or discard storage. Keep the same URL.
+Switching modes/models terminates the previous worker and releases its GPU
+resources. Its downloaded weights remain cached. Returning to a cached model
+requires loading it again, but not downloading it again. Clear gallery removes
+saved images; New chat removes the saved conversation. Neither deletes weights.
 
-## Run locally
+## Model choices
 
-Requires Node.js 22.12+ (Node 24 recommended).
+| Mode | Model | Approximate weights | Context / image |
+| --- | --- | --- | --- |
+| Text | SmolLM2 360M Instruct (default) | 194 MiB | 4,096 tokens |
+| Text | Qwen2.5 0.5B Instruct | 265 MiB | 4,096 tokens |
+| Text | Llama 3.2 1B Instruct | 663 MiB | 4,096 tokens |
+| Text | Qwen2.5 1.5B Instruct | 828 MiB | 4,096 tokens |
+| Image | Stable Diffusion Turbo (default) | 2.34 GiB | 512 × 512; one diffusion step |
+| Image | Janus Pro 1B | 2.13 GiB | 384 × 384; 576 image tokens |
+| Image | Janus 1.3B | 2.13 GiB | 384 × 384; 576 image tokens |
+
+Download sizes exclude tokenizers, configs and runtimes. Images need several GB
+of available device memory **in addition to** disk storage; they are substantially
+heavier than the small text baseline. WebGPU support alone does not guarantee a
+model fits. Loading/allocation errors are shown explicitly.
+
+Text uses WebLLM 0.2.85 and prebuilt q4f32 models, with no shader-f16 requirement.
+Responses stream from a dedicated worker, with a 1,024 output token limit and no
+wall-clock timeout. Speed is WebLLM's actual decode-token statistic.
+
+Drawing uses pinned Transformers.js 3.8.1 and ONNX Runtime Web
+1.22.0-dev.20250409-89f8206ba4. SD-Turbo uses the one-step pipeline from Microsoft's
+WebGPU example and requires shader-f16. Janus uses mixed q4 / float32 weights:
+its input embedding graph uses WASM for upstream compatibility, while its language
+and image decoders run on WebGPU. Janus progress reports image tokens/s, which
+cannot be predicted from another text model's speed. Completed image speed is
+reported as images/min and seconds/image. There are no generation timeouts.
+Stopping a drawing terminates the worker; load the cached model again to continue.
+
+The app displays GPU/device, selected model and size, context or output size,
+generation speed, elapsed time, origin storage, and page JS heap where exposed.
+Actual VRAM/total system RAM usage is not available through standard browser APIs.
+
+## Persistence and offline support
+
+The production service worker precaches all bundled app/worker assets and local
+ONNX WASM/glue files. It never deletes model caches when updating the app.
+WebLLM owns its model/config/WASM caches. Completeness checks verify **every weight
+shard**, tokenizer, configuration and GPU runtime for the selected text model.
+Image downloads use a dedicated Cache API store; after successful loading, a
+manifest records all used weights, tokenizer and configuration URLs. Offline
+readiness rechecks every entry. Model files are never considered cached merely
+because a past download succeeded. Tokenizers are loaded during setup, so the
+first offline drawing does not need a lazy tokenizer download.
+
+Chat uses localStorage; image PNG blobs and their prompts/model/timing metadata
+use IndexedDB. Prompts and generated outputs are never uploaded. Text is rendered
+as plain text. The PNG gallery offers local downloads, including if saving fails.
+
+Storage belongs to the same origin and browser profile. The app requests durable
+storage from the load gesture and shows whether the browser grants it. Best-effort
+storage may be evicted under pressure; clearing site data requires new downloads.
+Keep the tab visible: mobile operating systems may suspend/kill background tabs.
+
+## Development and deployment
+
+Requires Node.js 22.12+ (24 recommended).
 
 ```sh
-npm ci
+ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci
 npm run dev
 ```
 
-Development mode deliberately disables the app service worker. To test the
-offline milestone, use the production build:
+The environment variable skips an unused Node CUDA binary download; inference
+uses browser WebGPU. Development mode disables the app service worker. For offline
+checks use the production build:
 
 ```sh
 npm run build
 npm run preview
 ```
 
-Open the localhost URL printed by Vite. A phone accessing a computer's ordinary
-HTTP LAN address is **not** a secure context: use HTTPS hosting for phone tests.
-The relative asset paths also work under a GitHub Pages repository subpath.
-To enable hosting, choose **Settings → Pages → Source → GitHub Actions** once.
-The included workflow builds, runs smoke tests, and deploys `main` to GitHub
-Pages. After enabling hosting, rerun the workflow from the Actions tab if needed.
-
-## Model and runtime
-
-- WebLLM **0.2.85**, pinned with a lockfile.
-- **SmolLM2-360M-Instruct-q4f32_1-MLC**: open-weight instruct model, 360M parameters,
-  4-bit quantized weights with float32 computation. This prebuilt WebGPU model
-  needs no `shader-f16` feature. It is a constrained-device baseline, with limited
-  reasoning and factual accuracy.
-- Context: **4,096 tokens** including conversation and output.
-- Output: up to **1,024 tokens per response**, with **no wall-clock timeout**.
-  Stop is an explicit user action. Slow devices can finish at their own pace.
-- WebLLM's published GPU memory estimate is **~580 MB**; browser overhead and
-  temporary allocations also consume RAM. Actual GPU allocation is not exposed.
-- Generated text streams from a dedicated web worker. Decode speed comes from
-  WebLLM's actual token statistics at completion, not character counts.
-- The page reports JS heap use where supported, explicitly labeled as page heap,
-  plus total origin storage use. These are not measurements of VRAM or total RAM.
-
-WebGPU support varies by OS, browser, GPU, and driver. API availability alone
-does not guarantee the model fits. Startup requests a usable adapter/device;
-loading reports runtime GPU-limit and allocation errors. Context overflow is
-reported rather than silently deleting saved history; start a new chat when needed.
-Mobile operating systems can suspend hidden tabs or kill them under memory
-pressure. There is no promise of background execution; keep the tab visible.
+HTTPS or localhost is required for WebGPU. Relative assets work at the GitHub
+Pages repository subpath. The included workflow builds, runs lightweight smoke
+tests, and deploys `main` to GitHub Pages using GitHub Actions.
 
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
-| `src/device.ts` | Secure-context/WebGPU detection and available memory telemetry |
-| `src/model.ts` | One supported model and its context configuration |
-| `src/inference.ts` | Model loading, worker lifecycle, streaming, interruption |
-| `src/worker.ts` | WebLLM worker handler; actual GPU inference |
-| `src/persistence.ts` | Chat storage, persistence request, complete artifact-cache checks |
-| `src/ui.ts` | Text rendering and controls |
-| `src/main.ts` | App lifecycle and event orchestration |
-| `scripts/build.mjs` | Build and versioned precache of every app/worker asset |
-
-The app service worker only caches the app's own files. WebLLM owns model weights,
-tokenizer, config and WASM caches. Offline readiness verifies all manifest shards
-and the selected tokenizer/config/runtime, not just a remembered success flag.
-The initial model and runtime downloads contact Hugging Face and MLC's GitHub
-distribution. Chat messages are never uploaded by this app. Text is rendered as
-plain text, so model responses do not execute HTML.
+| `src/model.ts` | Shared text/image model catalog |
+| `src/text-model.ts` | Pinned WebLLM model configurations |
+| `src/device.ts` | WebGPU detection and available memory telemetry |
+| `src/inference.ts`, `src/worker.ts` | Text worker lifecycle, loading, streaming and stop |
+| `src/image-inference.ts`, `src/image-worker.ts` | Image worker protocol, loading and generation |
+| `src/persistence.ts` | Chat, storage persistence, text cache verification and app caching |
+| `src/image-cache.ts` | Image model asset storage and complete manifests |
+| `src/image-history.ts` | IndexedDB PNG/prompt history |
+| `src/ui.ts` | Safe chat/gallery rendering and controls |
+| `src/main.ts` | Mode/model selection and app lifecycle |
+| `scripts/build.mjs` | Build and complete offline app precache |
 
 ## Verification
 
@@ -96,28 +119,25 @@ npx playwright install chromium
 npm test
 ```
 
-Smoke tests cover unsupported devices, narrow-screen layout, safely rendered chat
-history, an offline app reload at `/MagicTalkingBox/`, the cached inference worker,
-and detection of an incomplete model cache. They do not simulate successful AI
-inference. The opt-in real-model test downloads the actual model, generates offline,
-reloads it offline, generates again, and checks for zero remote requests:
+Default smoke tests cover unsupported devices, narrow layouts, mode/model menus
+without downloads, text and image history restored offline, PNG download links,
+worker release on switching, incomplete caches, cached runtime files, and actual
+image-worker startup offline. Image UI integration uses a tiny fixture through
+the worker protocol; it does **not** run expensive inference. No live image model
+download/generation is performed by default. Image output quality and device GPU
+compatibility still require use on the target device.
 
-```sh
-REAL_MODEL=1 npm test -- --grep 'real model'
-```
+Opt-in existing text checks: `REAL_MODEL=1 npm test -- --grep 'real model'` downloads
+and generates; `REAL_CACHE=1 npm test -- --grep 'real cache'` checks a real offline
+model reload without generation. These harness time limits do not apply to the app.
+`CHROMIUM_PATH` selects a compatible existing Chromium binary.
 
-Use a WebGPU-capable test host. `CHROMIUM_PATH` can select an existing compatible
-Chromium binary. Test time limits are harness limits, not app generation limits.
-`REAL_CACHE=1 npm test -- --grep 'real cache'` checks actual model downloads and an
-offline page/model reload without waiting for generation.
+## Model/runtime sources
 
-Initial verification: the production build and three smoke tests passed. The real
-model downloaded and initialized on Chromium 153's software WebGPU adapter, then
-reloaded successfully after an offline page refresh with zero remote requests.
-Its offline reply did not finish within the harness's five-minute limit. Full
-offline chat needs confirmation on a device with a supported GPU; the app itself
-has no generation time limit.
+- [WebLLM](https://webllm.mlc.ai/docs/)
+- [Microsoft SD-Turbo WebGPU example](https://github.com/microsoft/onnxruntime-inference-examples/tree/main/js/sd-turbo)
+- [SD-Turbo ONNX files](https://huggingface.co/schmuell/sd-turbo-ort-web)
+- [Janus Pro 1B ONNX and reference usage](https://huggingface.co/onnx-community/Janus-Pro-1B-ONNX)
+- [Janus 1.3B ONNX and reference usage](https://huggingface.co/onnx-community/Janus-1.3B-ONNX)
 
-Model source: https://huggingface.co/mlc-ai/SmolLM2-360M-Instruct-q4f32_1-MLC
-
-Runtime documentation: https://webllm.mlc.ai/docs/user/advanced_usage.html
+Each model retains its publisher's license; follow the linked model cards.

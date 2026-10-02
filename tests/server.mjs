@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css' };
+const types = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.wasm': 'application/wasm', '.css': 'text/css' };
 createServer(async (request, response) => {
   const url = new URL(request.url, 'http://localhost');
   if (!url.pathname.startsWith('/MagicTalkingBox/')) { response.writeHead(404).end(); return; }

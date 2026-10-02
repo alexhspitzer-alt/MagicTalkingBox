@@ -1,5 +1,6 @@
 import { CreateWebWorkerMLCEngine, type MLCEngineInterface, type InitProgressReport, type CompletionUsage } from '@mlc-ai/web-llm';
-import { APP_CONFIG, MODEL_ID, MAX_OUTPUT_TOKENS } from './model';
+import { MAX_OUTPUT_TOKENS } from './model';
+import { textConfig } from './text-model';
 import type { Message } from './persistence';
 
 export class Inference {
@@ -16,9 +17,14 @@ export class Inference {
     finally { this.rejectFailure = undefined; }
   }
 
-  async load(onProgress: (report: InitProgressReport) => void) {
+  unload() {
     this.worker?.terminate();
+    this.worker = undefined;
     this.engine = undefined;
+  }
+
+  async load(id: string, onProgress: (report: InitProgressReport) => void) {
+    this.unload();
     this.failure = undefined;
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     const fail = () => {
@@ -28,8 +34,8 @@ export class Inference {
     };
     this.worker.addEventListener('error', fail);
     this.worker.addEventListener('messageerror', fail);
-    this.engine = await this.withWorkerFailure(CreateWebWorkerMLCEngine(this.worker, MODEL_ID, {
-      appConfig: APP_CONFIG, initProgressCallback: onProgress,
+    this.engine = await this.withWorkerFailure(CreateWebWorkerMLCEngine(this.worker, id, {
+      appConfig: textConfig(id), initProgressCallback: onProgress,
     }));
   }
 

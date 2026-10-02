@@ -1,6 +1,6 @@
 {
   "name": "magictalkingbox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local WebGPU AI workstation with offline model and app caching",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -21,7 +21,9 @@
   },
   "homepage": "https://github.com/alexhspitzer-alt/MagicTalkingBox#readme",
   "dependencies": {
-    "@mlc-ai/web-llm": "0.2.85"
+    "@huggingface/transformers": "3.8.1",
+    "@mlc-ai/web-llm": "0.2.85",
+    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
