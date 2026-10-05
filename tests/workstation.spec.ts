@@ -1,5 +1,21 @@
 import { test, expect } from '@playwright/test';
 
+test('lower-memory text model rejects missing float16 before weight downloads', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'gpu', { value: {
+    requestAdapter: async () => ({ features: new Set(), info: { description: 'GPU without float16' }, requestDevice: async () => ({ destroy() {} }) })
+  } }));
+  const remote: string[] = [];
+  page.on('request', request => { if (/huggingface|githubusercontent/.test(request.url())) remote.push(request.url()); });
+  await page.goto('./');
+  await expect(page.locator('#load')).toBeEnabled();
+  await page.locator('#model-select').selectOption('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+  await page.locator('#load').click();
+  await expect(page.locator('#error')).toContainText('requires GPU float16 support');
+  await expect(page.locator('#send')).toBeDisabled();
+  await expect(page.locator('#load')).toBeEnabled();
+  expect(remote).toEqual([]);
+});
+
 test('unsupported devices get a clear error and cannot download a model', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'gpu', { value: undefined }));
   await page.goto('./');
@@ -116,7 +132,11 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   const remote: string[] = [];
   page.on('request', request => { if (/huggingface|githubusercontent|jsdelivr/.test(request.url())) remote.push(request.url()); });
   await page.goto('./');
-  await expect(page.locator('#model-select option')).toHaveCount(7);
+  await expect(page.locator('#model-select option')).toHaveCount(8);
+  await page.locator('#model-select').selectOption('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
+  await page.locator('#model-select').selectOption('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+  await expect(page.locator('#context')).toContainText('2,048 tokens');
+  await expect(page.locator('#model-description')).toContainText('16-bit computation');
   await page.locator('#model-select').selectOption('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
   await expect(page.locator('#model')).toContainText('Qwen2.5 1.5B');
   await expect(page.locator('#size')).toContainText('828 MiB');

@@ -28,6 +28,7 @@ saved images; New chat removes the saved conversation. Neither deletes weights.
 | Text | Qwen2.5 1.5B Instruct | 828 MiB | 4,096 tokens |
 | Text | Qwen2.5 3B Instruct | 1,656 MiB | 4,096 tokens |
 | Text | Llama 3.2 3B Instruct | 1,724 MiB | 4,096 tokens |
+| Text | Llama 3.2 3B, lower memory (q4f16) | 1,724 MiB | 2,048 tokens |
 | Text | Qwen2.5 7B Instruct | 4,086 MiB | 4,096 tokens |
 | Image | Stable Diffusion Turbo (default) | 2.34 GiB | 512 × 512; one diffusion step |
 | Image | Janus Pro 1B | 2.13 GiB | 384 × 384; 576 image tokens |
@@ -38,8 +39,18 @@ of available device memory **in addition to** disk storage; they are substantial
 heavier than the small text baseline. WebGPU support alone does not guarantee a
 model fits. Loading/allocation errors are shown explicitly.
 
-Text uses WebLLM 0.2.85 and prebuilt q4f32 models, with no shader-f16 requirement.
-The larger text models retain the 4,096-token context. Published GPU allocation
+Text uses WebLLM 0.2.85. Standard q4f32 choices need no shader-f16 feature.
+The lower-memory Llama 3B variant uses q4f16 and requires shader-f16, checked
+before downloading weights. It has a 2,048-token context and a 512-token output
+limit. The published GPU estimate at the reference 4,096-token context is
+2,264 MB, compared with 2,952 MB for its q4f32 counterpart; the shorter context
+reduces KV-cache allocation further. Actual phone compatibility remains unverified.
+Its weights are cached separately; existing caches are retained.
+
+A tab crash after download can reflect peak RAM/GPU use during initialization.
+The origin storage reading measures disk usage, not live inference memory.
+A cache quota failure normally reports QuotaExceededError.
+The standard larger text models retain the 4,096-token context. Published GPU allocation
 estimates are about 2,894 MB for Qwen 3B, 2,952 MB for Llama 3B and 5,900 MB for
 Qwen 7B, plus browser overhead. Their download sizes are measured from the
 published weight manifests. Try a 3B model before 7B on phones; cached weights

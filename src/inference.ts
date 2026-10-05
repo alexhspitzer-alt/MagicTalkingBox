@@ -1,5 +1,5 @@
 import { CreateWebWorkerMLCEngine, type MLCEngineInterface, type InitProgressReport, type CompletionUsage } from '@mlc-ai/web-llm';
-import { MAX_OUTPUT_TOKENS } from './model';
+import { MAX_OUTPUT_TOKENS, getModel } from './model';
 import { textConfig } from './text-model';
 import type { Message } from './persistence';
 
@@ -8,6 +8,7 @@ export class Inference {
   private worker?: Worker;
   private rejectFailure?: (error: Error) => void;
   private failure?: Error;
+  private maxOutputTokens = MAX_OUTPUT_TOKENS;
   constructor(private onFatal: (error: Error) => void) {}
 
   private async withWorkerFailure<T>(operation: Promise<T>): Promise<T> {
@@ -25,6 +26,7 @@ export class Inference {
 
   async load(id: string, onProgress: (report: InitProgressReport) => void) {
     this.unload();
+    this.maxOutputTokens = getModel(id).maxOutputTokens ?? MAX_OUTPUT_TOKENS;
     this.failure = undefined;
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     const fail = () => {
@@ -45,7 +47,7 @@ export class Inference {
       const stream = await this.engine!.chat.completions.create({
         messages: [{ role: 'system', content: 'You are a helpful assistant. Answer clearly and honestly.' }, ...messages],
         stream: true, stream_options: { include_usage: true },
-        max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.7,
+        max_tokens: this.maxOutputTokens, temperature: 0.7,
       });
       let finishReason: string | null = null;
       for await (const chunk of stream) {

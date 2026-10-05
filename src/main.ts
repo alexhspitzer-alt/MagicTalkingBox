@@ -7,7 +7,7 @@ import { readImages, saveImage, clearImages, type SavedImage } from './image-his
 import { cacheApp, modelCacheInfo, readChat, saveChat, clearChat, storageInfo, type Message } from './persistence';
 import { UI, element } from './ui';
 import { textModel } from './text-model';
-import { MODELS, MODEL_ID, getModel, type Mode } from './model';
+import { MODELS, MODEL_ID, CONTEXT_SIZE, MAX_OUTPUT_TOKENS, getModel, type Mode } from './model';
 
 const ui = new UI();
 let supported = false, loaded = false, busy = false, appCached = false, modelCached = false;
@@ -109,6 +109,10 @@ element('load').addEventListener('click', async () => {
   try {
     await refreshStorage(true);
     if (mode === 'text') {
+      if (getModel(selected).requiresF16) {
+        const adapter = await navigator.gpu?.requestAdapter({ powerPreference: 'high-performance' });
+        if (!adapter?.features.has('shader-f16')) throw new Error('This model requires GPU float16 support. Select a standard text model on this device.');
+      }
       const allocation = textModel(selected).vram_required_MB;
       ui.status(`Loading ${getModel(selected).name}. Estimated GPU allocation: ~${allocation?.toFixed(0)} MB.`);
       await inference.load(selected, report => { ui.status(report.text); progress.value = report.progress; });
@@ -156,7 +160,8 @@ element<HTMLFormElement>('chat').addEventListener('submit', async event => {
         answer!.content += delta; ui.append(delta);
         if (performance.now() - checkpoint > 1000) { persist(); checkpoint = performance.now(); }
       }, usage => { element('speed').textContent = `${usage.extra.decode_tokens_per_s.toFixed(2)} tokens/s · ${usage.completion_tokens} tokens`; });
-      ui.status(reason === 'length' ? 'Reached the response or context limit (1,024 output / 4,096 total tokens). Continue or start a new chat as needed.' : 'Ready.');
+      const model = getModel(selected);
+      ui.status(reason === 'length' ? `Reached the response or context limit (${(model.maxOutputTokens ?? MAX_OUTPUT_TOKENS).toLocaleString()} output / ${(model.contextTokens ?? CONTEXT_SIZE).toLocaleString()} total tokens). Continue or start a new chat as needed.` : 'Ready.');
     }
   } catch (error) {
     if (stopped && mode === 'image') ui.status('Drawing stopped. Reload the cached model to draw again.');
