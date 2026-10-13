@@ -157,7 +157,7 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await expect(page.locator('#model-description')).toContainText('Loads one network at a time');
   await expect(page.locator('#size')).toContainText('shared SD-Turbo cache');
-  await expect(page.locator('#context')).toContainText('512 × 512');
+  await expect(page.locator('#context')).toContainText('256 × 256');
   await page.locator('#model-select').selectOption('janus-pro-1b');
   await expect(page.locator('#context')).toContainText('576 image tokens');
   await page.locator('#mode-select').selectOption('text');

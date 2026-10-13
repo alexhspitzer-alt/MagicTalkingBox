@@ -41,8 +41,10 @@ export async function imageAssetCache() {
   return {
     tracked,
     async ensure(url: string) { await ensure(url); },
-    async download(url: string) {
-      return (await ensure(url)).arrayBuffer();
+    async withModelURL<T>(url: string, load: (modelURL: string) => Promise<T>): Promise<T> {
+      const modelURL = URL.createObjectURL(await (await ensure(url)).blob());
+      try { return await load(modelURL); }
+      finally { URL.revokeObjectURL(modelURL); }
     },
     async complete(id: string) {
       if (failures.length) throw new Error(`Model files could not be saved. Free browser storage and retry. ${failures[0]}`);

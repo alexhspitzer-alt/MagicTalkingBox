@@ -31,7 +31,7 @@ saved images; New chat removes the saved conversation. Neither deletes weights.
 | Text | Llama 3.2 3B, lower memory (q4f16) | 1,724 MiB | 2,048 tokens |
 | Text | Qwen2.5 7B Instruct | 4,086 MiB | 4,096 tokens |
 | Image | Stable Diffusion Turbo (default) | 2.34 GiB | 512 × 512; one diffusion step |
-| Image | Stable Diffusion Turbo, low memory | Same shared 2.34 GiB | 512 × 512; one network at a time |
+| Image | Stable Diffusion Turbo, low memory | Same shared 2.34 GiB | 256 × 256; one network at a time |
 | Image | Janus Pro 1B | 2.13 GiB | 384 × 384; 576 image tokens |
 | Image | Janus 1.3B | 2.13 GiB | 384 × 384; 576 image tokens |
 
@@ -72,8 +72,13 @@ Stopping a drawing terminates the worker; load the cached model again to continu
 without initializing all three networks. Each drawing loads the prompt encoder,
 UNet, then VAE decoder in sequence, awaiting session release between stages.
 Small CPU tensors carry results between networks; each stage still runs on WebGPU.
-This reduces simultaneous resident weights and trades speed for memory, without
-changing resolution or the one-step pipeline. Standard SD-Turbo and low-memory
+This reduces simultaneous resident weights and trades speed for memory. Low-memory
+mode uses 256 × 256 output (32 × 32 latents) to reduce activation buffers; standard
+mode keeps 512 × 512. Both use one diffusion step. Session creation uses a temporary
+Blob URL so ORT can discard its source buffer after copying into WASM, rather than
+retaining an application-owned model buffer throughout graph initialization.
+The temporary URL is revoked on success and failure. This still requires a
+model-sized WASM allocation and GPU weights; it does not stream weights into GPU memory. Standard SD-Turbo and low-memory
 mode reuse the exact same weight URLs, so switching does not duplicate downloads.
 The largest network and its initialization buffers must still fit; this is not a
 guarantee for every phone. The first real network allocation occurs when drawing.
