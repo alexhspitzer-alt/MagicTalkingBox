@@ -1,4 +1,5 @@
 import { loadDiffusion } from './diffusion';
+import { loadTinyDiffusion } from './tiny-diffusion';
 import { getModel, type ModelOption } from './model';
 import { imageAssetCache } from './image-cache';
 import type { ImageProgress, ImageResult } from './image-inference';
@@ -32,7 +33,9 @@ self.onmessage = async (event: MessageEvent<{ id: number; type: string; model?: 
       env.backends.onnx.wasm.proxy = false;
       backend = option.backend === 'sd-turbo'
         ? await loadDiffusion(option, event.data.runtime!, cache, report)
-        : await loadJanus(option, report);
+        : option.backend === 'tiny-lcm'
+          ? await loadTinyDiffusion(option, event.data.runtime!, cache, report)
+          : await loadJanus(option, report);
       await cache.complete(option.id);
       report({ text: option.stagedLoading ? 'Image weights cached. Networks load one at a time when drawing.' : 'Image model loaded and cached.', progress: 1 });
     } else if (type === 'generate') {

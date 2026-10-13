@@ -30,6 +30,7 @@ saved images; New chat removes the saved conversation. Neither deletes weights.
 | Text | Llama 3.2 3B Instruct | 1,724 MiB | 4,096 tokens |
 | Text | Llama 3.2 3B, lower memory (q4f16) | 1,724 MiB | 2,048 tokens |
 | Text | Qwen2.5 7B Instruct | 4,086 MiB | 4,096 tokens |
+| Image | Tiny SD LCM, smaller memory | ~947 MiB | 256 × 256; four LCM steps |
 | Image | Stable Diffusion Turbo (default) | 2.34 GiB | 512 × 512; one diffusion step |
 | Image | Stable Diffusion Turbo, low memory | Same shared 2.34 GiB | 256 × 256; one network at a time |
 | Image | Janus Pro 1B | 2.13 GiB | 384 × 384; 576 image tokens |
@@ -83,6 +84,22 @@ mode reuse the exact same weight URLs, so switching does not duplicate downloads
 The largest network and its initialization buffers must still fit; this is not a
 guarantee for every phone. The first real network allocation occurs when drawing.
 Recreating sessions from cached files makes every image slower, including offline.
+
+**Tiny SD LCM · smaller memory** is a separate, genuinely smaller model based on
+Segmind Tiny SD and an LCM adapter. The pinned ONNX export is
+`akameswa/lcm-tiny-sd-onnx-fp16` at `3b423c4e1d61d50c56efdde24592862be68c8574`.
+Its drawing weights are 646,809,600 bytes (~617 MiB), approximately 63% smaller
+than SD-Turbo's UNet. The text-to-image files total ~947 MiB; VAE encoder files
+are not downloaded. This is a separate cache; existing SD-Turbo downloads remain.
+The pipeline draws at 256 × 256, using the model author's four-step/guidance-1
+recipe, the export's scaled-linear/epsilon LCM schedule, and SD 1.5 latent scaling.
+The encoder, UNet (all four steps), and decoder run in sequence with CPU stage
+outputs; each network is released before the next starts. External ONNX data
+files are cached and passed explicitly to ORT, including during offline loading.
+Float16 GPU support is required. Smaller weights improve the prospect of fitting
+on a phone, but do not guarantee successful initialization or good image quality.
+Graph inputs, dynamic dimensions, external data paths, and runtime operator
+support were inspected without downloading complete weights or generating images.
 
 The app displays GPU/device, selected model and size, context or output size,
 generation speed, elapsed time, origin storage, and page JS heap where exposed.

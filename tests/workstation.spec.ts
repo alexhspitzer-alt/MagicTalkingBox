@@ -151,9 +151,13 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   }
   await page.locator('#model-select').selectOption('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
   await page.locator('#mode-select').selectOption('image');
-  await expect(page.locator('#model-select option')).toHaveCount(4);
+  await expect(page.locator('#model-select option')).toHaveCount(5);
   await expect(page.locator('#send')).toHaveText('Draw ↗');
   await expect(page.locator('#context')).toContainText('512 × 512');
+  await page.locator('#model-select').selectOption('tiny-sd-lcm');
+  await expect(page.locator('#size')).toContainText('947 MiB');
+  await expect(page.locator('#context')).toContainText('256 × 256');
+  await expect(page.locator('#context')).toContainText('4 steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await expect(page.locator('#model-description')).toContainText('Loads one network at a time');
   await expect(page.locator('#size')).toContainText('shared SD-Turbo cache');
@@ -194,6 +198,10 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
   await page.goto('./');
   await expect(page.locator('#app-cache')).toHaveText('App cache: complete');
   await page.locator('#mode-select').selectOption('image');
+  await page.locator('#model-select').selectOption('tiny-sd-lcm');
+  await expect(page.locator('#size')).toContainText('947 MiB');
+  await expect(page.locator('#context')).toContainText('256 × 256');
+  await expect(page.locator('#context')).toContainText('4 steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await page.locator('#load').click();
   await expect(page.locator('#send')).toBeEnabled();
@@ -249,4 +257,26 @@ test('selected image cache needs every artifact and the real image worker starts
       worker.postMessage({ id: 1, type: 'load', model: 'unknown-test-model' });
     });
   })).toContain('Unknown model');
+});
+
+test('Tiny SD offline readiness includes external drawing weights', async ({ page, context }) => {
+  await page.goto('./');
+  await expect(page.locator('#app-cache')).toHaveText('App cache: complete');
+  const base = 'https://huggingface.co/akameswa/lcm-tiny-sd-onnx-fp16/resolve/3b423c4e1d61d50c56efdde24592862be68c8574/';
+  const urls = ['text_encoder/model.onnx', 'unet/model.onnx', 'unet/model.onnx_data', 'vae_decoder/model.onnx', 'vae_decoder/model.onnx_data'].map(file => base + file);
+  await page.evaluate(async urls => {
+    const cache = await caches.open('magic-box-image-models-v1');
+    await cache.put(new URL('/__magic-box__/image-manifest-tiny-sd-lcm.json', location.origin), Response.json({ urls, bytes: 100 }));
+    for (const url of urls) if (!url.endsWith('unet/model.onnx_data')) await cache.put(url, new Response('tiny fixture'));
+  }, urls);
+  await page.locator('#mode-select').selectOption('image');
+  await page.locator('#model-select').selectOption('tiny-sd-lcm');
+  await expect(page.locator('#model-cache')).toHaveText('Model cache: incomplete');
+  await page.evaluate(async url => {
+    await (await caches.open('magic-box-image-models-v1')).put(url, new Response('external weights fixture'));
+  }, base + 'unet/model.onnx_data');
+  await context.setOffline(true); await page.reload();
+  await expect(page.locator('#model-select')).toHaveValue('tiny-sd-lcm');
+  await expect(page.locator('#model-cache')).toHaveText('Model cache: complete');
+  await expect(page.locator('#offline-status')).toContainText('Offline ready');
 });
