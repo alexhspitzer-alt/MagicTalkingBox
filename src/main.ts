@@ -122,7 +122,8 @@ element('load').addEventListener('click', async () => {
         if (report.progress === undefined) progress.removeAttribute('value'); else progress.value = report.progress;
       });
     }
-    loaded = true; element('load').textContent = 'Model loaded'; ui.status('Ready. All inference runs locally.');
+    loaded = true; element('load').textContent = 'Model loaded';
+    ui.status(getModel(selected).stagedLoading ? 'Ready. Image weights cached; each drawing loads one network at a time locally.' : 'Ready. All inference runs locally.');
     await refreshStorage();
   } catch (error) {
     loaded = false; inference.unload(); imageInference.unload();

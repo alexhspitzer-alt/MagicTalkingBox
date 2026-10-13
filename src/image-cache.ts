@@ -28,17 +28,21 @@ export async function imageAssetCache() {
       catch (error) { failures.push(`${url}: ${String(error)}`); throw error; }
     },
   };
+  async function ensure(url: string) {
+    let response = await tracked.match(url);
+    if (!response) {
+      // Cache API streams directly to storage, without a model-sized JS buffer.
+      await cache.add(url);
+      response = await tracked.match(url);
+    }
+    if (!response) throw new Error(`Model file could not be cached: ${url}`);
+    return response;
+  }
   return {
     tracked,
+    async ensure(url: string) { await ensure(url); },
     async download(url: string) {
-      let response = await tracked.match(url);
-      if (!response) {
-        // Stream directly to storage instead of cloning multi-GB responses.
-        await cache.add(url);
-        response = await tracked.match(url);
-      }
-      if (!response) throw new Error(`Model file could not be cached: ${url}`);
-      return response.arrayBuffer();
+      return (await ensure(url)).arrayBuffer();
     },
     async complete(id: string) {
       if (failures.length) throw new Error(`Model files could not be saved. Free browser storage and retry. ${failures[0]}`);

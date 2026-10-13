@@ -151,8 +151,12 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   }
   await page.locator('#model-select').selectOption('Qwen2.5-1.5B-Instruct-q4f32_1-MLC');
   await page.locator('#mode-select').selectOption('image');
-  await expect(page.locator('#model-select option')).toHaveCount(3);
+  await expect(page.locator('#model-select option')).toHaveCount(4);
   await expect(page.locator('#send')).toHaveText('Draw ↗');
+  await expect(page.locator('#context')).toContainText('512 × 512');
+  await page.locator('#model-select').selectOption('sd-turbo-low-memory');
+  await expect(page.locator('#model-description')).toContainText('Loads one network at a time');
+  await expect(page.locator('#size')).toContainText('shared SD-Turbo cache');
   await expect(page.locator('#context')).toContainText('512 × 512');
   await page.locator('#model-select').selectOption('janus-pro-1b');
   await expect(page.locator('#context')).toContainText('576 image tokens');
@@ -190,8 +194,10 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
   await page.goto('./');
   await expect(page.locator('#app-cache')).toHaveText('App cache: complete');
   await page.locator('#mode-select').selectOption('image');
+  await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await page.locator('#load').click();
   await expect(page.locator('#send')).toBeEnabled();
+  await expect(page.locator('#status')).toContainText('each drawing loads one network at a time');
   await page.locator('#prompt').fill('<b>a tiny drawing</b>');
   await page.locator('#send').click();
   await expect(page.locator('#status')).toHaveText('Ready. Image saved on this device.');

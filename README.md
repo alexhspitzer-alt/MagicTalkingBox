@@ -31,6 +31,7 @@ saved images; New chat removes the saved conversation. Neither deletes weights.
 | Text | Llama 3.2 3B, lower memory (q4f16) | 1,724 MiB | 2,048 tokens |
 | Text | Qwen2.5 7B Instruct | 4,086 MiB | 4,096 tokens |
 | Image | Stable Diffusion Turbo (default) | 2.34 GiB | 512 × 512; one diffusion step |
+| Image | Stable Diffusion Turbo, low memory | Same shared 2.34 GiB | 512 × 512; one network at a time |
 | Image | Janus Pro 1B | 2.13 GiB | 384 × 384; 576 image tokens |
 | Image | Janus 1.3B | 2.13 GiB | 384 × 384; 576 image tokens |
 
@@ -66,6 +67,17 @@ and image decoders run on WebGPU. Janus progress reports image tokens/s, which
 cannot be predicted from another text model's speed. Completed image speed is
 reported as images/min and seconds/image. There are no generation timeouts.
 Stopping a drawing terminates the worker; load the cached model again to continue.
+
+**SD-Turbo · low memory** streams the same weights into the existing disk cache
+without initializing all three networks. Each drawing loads the prompt encoder,
+UNet, then VAE decoder in sequence, awaiting session release between stages.
+Small CPU tensors carry results between networks; each stage still runs on WebGPU.
+This reduces simultaneous resident weights and trades speed for memory, without
+changing resolution or the one-step pipeline. Standard SD-Turbo and low-memory
+mode reuse the exact same weight URLs, so switching does not duplicate downloads.
+The largest network and its initialization buffers must still fit; this is not a
+guarantee for every phone. The first real network allocation occurs when drawing.
+Recreating sessions from cached files makes every image slower, including offline.
 
 The app displays GPU/device, selected model and size, context or output size,
 generation speed, elapsed time, origin storage, and page JS heap where exposed.
@@ -123,6 +135,7 @@ tests, and deploys `main` to GitHub Pages using GitHub Actions.
 | `src/device.ts` | WebGPU detection and available memory telemetry |
 | `src/inference.ts`, `src/worker.ts` | Text worker lifecycle, loading, streaming and stop |
 | `src/image-inference.ts`, `src/image-worker.ts` | Image worker protocol, loading and generation |
+| `src/diffusion.ts`, `src/diffusion-sessions.ts` | SD-Turbo pipeline and retained/staged network lifecycle |
 | `src/persistence.ts` | Chat, storage persistence, text cache verification and app caching |
 | `src/image-cache.ts` | Image model asset storage and complete manifests |
 | `src/image-history.ts` | IndexedDB PNG/prompt history |
@@ -145,6 +158,8 @@ image-worker startup offline. Image UI integration uses a tiny fixture through
 the worker protocol; it does **not** run expensive inference. No live image model
 download/generation is performed by default. Image output quality and device GPU
 compatibility still require use on the target device.
+Small mocked-session checks verify staged release order, repeated drawings, and
+cleanup on errors, without loading model weights or running GPU inference.
 
 Opt-in existing text checks: `REAL_MODEL=1 npm test -- --grep 'real model'` downloads
 and generates; `REAL_CACHE=1 npm test -- --grep 'real cache'` checks a real offline

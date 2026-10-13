@@ -1,3 +1,4 @@
+import { loadDiffusion } from './diffusion';
 import { getModel, type ModelOption } from './model';
 import { imageAssetCache } from './image-cache';
 import type { ImageProgress, ImageResult } from './image-inference';
@@ -33,7 +34,7 @@ self.onmessage = async (event: MessageEvent<{ id: number; type: string; model?: 
         ? await loadDiffusion(option, event.data.runtime!, cache, report)
         : await loadJanus(option, report);
       await cache.complete(option.id);
-      report({ text: 'Image model loaded and cached.', progress: 1 });
+      report({ text: option.stagedLoading ? 'Image weights cached. Networks load one at a time when drawing.' : 'Image model loaded and cached.', progress: 1 });
     } else if (type === 'generate') {
       if (!backend) throw new Error('Load an image model first.');
       const start = performance.now();
@@ -79,75 +80,6 @@ async function loadJanus(option: ModelOption, report: (progress: ImageProgress) 
       const images = await model.generate_images({ ...inputs, min_new_tokens: total, max_new_tokens: total, do_sample: true, streamer: new ImageStreamer() });
       if (!images[0]) throw new Error('Janus returned no image.');
       return images[0].toBlob('image/png');
-    },
-  };
-}
-
-// SD-Turbo's one-step Euler pipeline follows Microsoft's MIT-licensed WebGPU
-// example: microsoft/onnxruntime-inference-examples/js/sd-turbo/index.js.
-async function loadDiffusion(option: ModelOption, runtime: string, cache: Awaited<ReturnType<typeof imageAssetCache>>, report: (progress: ImageProgress) => void): Promise<Backend> {
-  const ort = await import('onnxruntime-web/webgpu');
-  const { AutoTokenizer } = await import('@huggingface/transformers');
-  ort.env.wasm.wasmPaths = runtime; ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = false;
-  report({ text: 'Loading and caching image tokenizer…' });
-  const tokenizer = await AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch16');
-  tokenizer.pad_token_id = 0;
-  const common: import('onnxruntime-web').InferenceSession.SessionOptions = {
-    executionProviders: ['webgpu'], enableMemPattern: false, enableCpuMemArena: false,
-    extra: { session: { disable_prepacking: '1', use_device_allocator_for_initializers: '1', use_ort_model_bytes_directly: '1', use_ort_model_bytes_for_initializers: '1' } },
-  };
-  const specifications: { name: string; dimensions: Record<string, number> }[] = [
-    { name: 'unet', dimensions: { batch_size: 1, num_channels: 4, height: 64, width: 64, sequence_length: 77 } },
-    { name: 'text_encoder', dimensions: { batch_size: 1 } },
-    { name: 'vae_decoder', dimensions: { batch_size: 1, num_channels_latent: 4, height_latent: 64, width_latent: 64 } },
-  ];
-  const sessions: Record<string, import('onnxruntime-web').InferenceSession> = {};
-  for (const spec of specifications) {
-    report({ text: `Downloading / loading ${spec.name}. Large files may take several minutes.` });
-    const bytes = await cache.download(`https://huggingface.co/${option.repo}/resolve/main/${spec.name}/model.onnx`);
-    sessions[spec.name] = await ort.InferenceSession.create(new Uint8Array(bytes), {
-      ...common, freeDimensionOverrides: spec.dimensions,
-      ...(spec.name === 'text_encoder' ? { preferredOutputLocation: { last_hidden_state: 'gpu-buffer' as const } } : {}),
-    });
-  }
-  return {
-    async generate(prompt, report) {
-      const tensors = new Set<import('onnxruntime-web').Tensor>();
-      const keep = <T extends import('onnxruntime-web').Tensor>(tensor: T) => { tensors.add(tensor); return tensor; };
-      const collect = (outputs: Record<string, import('onnxruntime-web').Tensor>) => { Object.values(outputs).forEach(keep); return outputs; };
-      try {
-        report({ text: 'Encoding image prompt locally…', progress: .05 });
-        const tokenized = tokenizer(prompt, { padding: 'max_length', max_length: 77, truncation: true, return_tensor: false });
-        const ids = keep(new ort.Tensor('int32', Int32Array.from(tokenized.input_ids), [1, tokenized.input_ids.length]));
-        const { last_hidden_state } = collect(await sessions.text_encoder.run({ input_ids: ids }));
-        const sigma = 14.6146, count = 4 * 64 * 64;
-        const noise = new Float32Array(count), scaled = new Float32Array(count);
-        for (let i = 0; i < count; i++) {
-          noise[i] = Math.sqrt(-2 * Math.log(Math.max(Math.random(), Number.EPSILON))) * Math.cos(2 * Math.PI * Math.random()) * sigma;
-          scaled[i] = noise[i] / Math.sqrt(sigma * sigma + 1);
-        }
-        report({ text: 'Drawing locally: diffusion step 1 / 1…', progress: .2 });
-        const outputs = collect(await sessions.unet.run({
-          sample: keep(new ort.Tensor('float32', scaled, [1, 4, 64, 64])),
-          timestep: keep(new ort.Tensor('int64', BigInt64Array.from([999n]), [1])), encoder_hidden_states: last_hidden_state,
-        }));
-        const prediction = outputs.out_sample.data as Float32Array;
-        const latent = new Float32Array(count);
-        for (let i = 0; i < count; i++) latent[i] = (noise[i] - sigma * prediction[i]) / .18215;
-        report({ text: 'Decoding image locally…', progress: .8 });
-        const { sample } = collect(await sessions.vae_decoder.run({ latent_sample: keep(new ort.Tensor('float32', latent, [1, 4, 64, 64])) }));
-        const [, , height, width] = sample.dims;
-        const pixels = sample.data as Float32Array, rgba = new Uint8ClampedArray(width * height * 4);
-        for (let i = 0; i < width * height; i++) {
-          for (let c = 0; c < 3; c++) rgba[4 * i + c] = Math.round(Math.max(0, Math.min(1, pixels[c * width * height + i] / 2 + .5)) * 255);
-          rgba[4 * i + 3] = 255;
-        }
-        const canvas = new OffscreenCanvas(width, height);
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Image rendering is unavailable on this device.');
-        context.putImageData(new ImageData(rgba, width, height), 0, 0);
-        return await canvas.convertToBlob({ type: 'image/png' });
-      } finally { for (const tensor of tensors) tensor.dispose(); }
     },
   };
 }
