@@ -25,7 +25,7 @@ await writeFile('dist/service-worker.js', `
 const CACHE = ${JSON.stringify(cache)};
 const FILES = ${JSON.stringify(urls)};
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(file => new Request(new URL(file, self.registration.scope), { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('magic-box-app-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim()));
@@ -34,6 +34,18 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || !url.href.startsWith(self.registration.scope)) return;
   event.respondWith(caches.open(CACHE).then(async cache => {
+    // Online navigations get a fresh shell; offline reloads keep using storage.
+    // Hash-named assets remain cache-first so local inference stays offline.
+    if (event.request.mode === 'navigate') {
+      try {
+        const fresh = await fetch(event.request, { cache: 'no-store' });
+        if (fresh.ok) {
+          await cache.put(new URL('index.html', self.registration.scope), fresh.clone());
+          return fresh;
+        }
+      } catch { /* Offline: use the installed app below. */ }
+      return await cache.match(new URL('index.html', self.registration.scope)) || fetch(event.request);
+    }
     const cached = await cache.match(event.request);
     if (cached) return cached;
     if (event.request.mode === 'navigate') return await cache.match(new URL('index.html', self.registration.scope)) || fetch(event.request);

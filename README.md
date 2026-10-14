@@ -203,3 +203,8 @@ for the prompt encoder, all four drawing steps, and decoder. Timings measure
 wall-clock seconds, not GPU utilization or memory usage. The 512 × 512 trial caused browser crashes on the target phone during the first
 drawing pass, so output returns to 256 × 256. Weight downloads and cache URLs
 are unchanged, and stage timings remain available.
+
+Online page navigation checks the server for a fresh app shell, falling back to
+the installed page offline. App installation bypasses stale HTTP cache entries;
+service-worker script updates also bypass HTTP caching. Model caches are separate
+and remain intact when the app updates.

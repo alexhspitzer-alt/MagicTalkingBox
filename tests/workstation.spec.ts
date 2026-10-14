@@ -282,3 +282,18 @@ test('Tiny SD offline readiness includes external drawing weights', async ({ pag
   await expect(page.locator('#model-cache')).toHaveText('Model cache: complete');
   await expect(page.locator('#offline-status')).toContainText('Offline ready');
 });
+
+test('online reload replaces a stale offline shell and preserves model cache', async ({ page, context }) => {
+  await page.goto('./');
+  await expect(page.locator('#app-cache')).toHaveText('App cache: complete');
+  await page.evaluate(async () => {
+    const name = (await caches.keys()).find(name => name.startsWith('magic-box-app-'))!;
+    await (await caches.open(name)).put(new URL('index.html', location.href), new Response('<html><body>STALE APP SHELL</body></html>', { headers: { 'Content-Type': 'text/html' } }));
+    await (await caches.open('magic-box-image-models-v1')).put('https://huggingface.co/test/preserved-model', new Response('cached weights'));
+  });
+  await page.reload();
+  await expect(page.locator('.eyebrow')).toContainText('V0.10');
+  expect(await page.evaluate(async () => Boolean(await (await caches.open('magic-box-image-models-v1')).match('https://huggingface.co/test/preserved-model')))).toBe(true);
+  await context.setOffline(true); await page.reload();
+  await expect(page.locator('.eyebrow')).toContainText('V0.10');
+});
