@@ -41,8 +41,12 @@ self.onmessage = async (event: MessageEvent<{ id: number; type: string; model?: 
     } else if (type === 'generate') {
       if (!backend) throw new Error('Load an image model first.');
       const start = performance.now();
-      const blob = await backend.generate(event.data.prompt!, report);
-      result = { blob, seconds: (performance.now() - start) / 1000 };
+      let timings: Record<string, number> | undefined;
+      const blob = await backend.generate(event.data.prompt!, progress => {
+        if (progress.timings) timings = progress.timings;
+        report(progress);
+      });
+      result = { blob, seconds: (performance.now() - start) / 1000, timings };
     } else throw new Error(`Unknown image operation: ${type}`);
     self.postMessage({ id, type: 'result', result });
   } catch (error) {

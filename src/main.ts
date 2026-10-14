@@ -147,7 +147,7 @@ element<HTMLFormElement>('chat').addEventListener('submit', async event => {
         ui.status(report.text);
         if (report.tokensPerSecond !== undefined) element('speed').textContent = `${report.tokensPerSecond.toFixed(2)} image tokens/s · ${report.tokens} tokens`;
       });
-      const image: SavedImage = { id: crypto.randomUUID(), prompt: text, model: getModel(selected).name, blob: result.blob, seconds: result.seconds, created: Date.now() };
+      const image: SavedImage = { id: crypto.randomUUID(), prompt: text, model: getModel(selected).name, blob: result.blob, seconds: result.seconds, timings: result.timings, created: Date.now() };
       images.push(image); ui.renderImages(images);
       element('speed').textContent = `${(60 / Math.max(result.seconds, .001)).toFixed(2)} images/min · ${result.seconds.toFixed(1)} s/image`;
       try { await saveImage(image); ui.status('Ready. Image saved on this device.'); }

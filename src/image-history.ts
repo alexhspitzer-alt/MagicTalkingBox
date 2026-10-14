@@ -1,4 +1,4 @@
-export type SavedImage = { id: string; prompt: string; model: string; blob: Blob; seconds: number; created: number };
+export type SavedImage = { id: string; prompt: string; model: string; blob: Blob; seconds: number; created: number; timings?: Record<string, number> };
 let database: Promise<IDBDatabase> | undefined;
 function openDatabase() {
   return database ??= new Promise<IDBDatabase>((resolve, reject) => {

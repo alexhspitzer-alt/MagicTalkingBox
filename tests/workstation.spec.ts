@@ -156,7 +156,7 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   await expect(page.locator('#context')).toContainText('512 × 512');
   await page.locator('#model-select').selectOption('tiny-sd-lcm');
   await expect(page.locator('#size')).toContainText('947 MiB');
-  await expect(page.locator('#context')).toContainText('256 × 256');
+  await expect(page.locator('#context')).toContainText('512 × 512');
   await expect(page.locator('#context')).toContainText('4 steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await expect(page.locator('#model-description')).toContainText('Loads one network at a time');
@@ -187,7 +187,7 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
           if (message.type === 'load') this.dispatchEvent(new MessageEvent('message', { data: { id: message.id, type: 'result' } }));
           else {
             const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDAAAAAAASUVORK5CYII='), c => c.charCodeAt(0));
-            this.dispatchEvent(new MessageEvent('message', { data: { id: message.id, type: 'result', result: { blob: new Blob([bytes], { type: 'image/png' }), seconds: 2 } } }));
+            this.dispatchEvent(new MessageEvent('message', { data: { id: message.id, type: 'result', result: { blob: new Blob([bytes], { type: 'image/png' }), seconds: 2, timings: { 'Load unet': 1, 'Drawing step 1': .5 } } } }));
           }
         }, 10);
       }
@@ -200,7 +200,7 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
   await page.locator('#mode-select').selectOption('image');
   await page.locator('#model-select').selectOption('tiny-sd-lcm');
   await expect(page.locator('#size')).toContainText('947 MiB');
-  await expect(page.locator('#context')).toContainText('256 × 256');
+  await expect(page.locator('#context')).toContainText('512 × 512');
   await expect(page.locator('#context')).toContainText('4 steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await page.locator('#load').click();
@@ -210,6 +210,7 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
   await page.locator('#send').click();
   await expect(page.locator('#status')).toHaveText('Ready. Image saved on this device.');
   await expect(page.locator('.image-result img')).toHaveCount(1);
+  await expect(page.locator('.image-result')).toContainText('Load unet: 1.0 s');
   await expect(page.locator('.image-result b')).toHaveCount(0);
   await expect(page.locator('.download')).toHaveAttribute('download', /\.png$/);
   await page.locator('#model-select').selectOption('janus-pro-1b');
@@ -219,6 +220,7 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
   await expect(page.locator('#mode-select')).toHaveValue('image');
   await expect(page.locator('#model-select')).toHaveValue('janus-pro-1b');
   await expect(page.locator('.image-result img')).toHaveCount(1);
+  await expect(page.locator('.image-result')).toContainText('Load unet: 1.0 s');
   await expect(page.locator('.image-result')).toContainText('<b>a tiny drawing</b>');
   expect(await page.evaluate(async () => {
     const name = (await caches.keys()).find(name => name.startsWith('magic-box-app-'))!;

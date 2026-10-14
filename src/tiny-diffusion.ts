@@ -6,7 +6,7 @@ import { LCM_TIMESTEPS, lcmStep, normalNoise } from './lcm-scheduler';
 
 export const TINY_REVISION = '3b423c4e1d61d50c56efdde24592862be68c8574';
 export const TINY_FILES = ['text_encoder/model.onnx', 'unet/model.onnx', 'unet/model.onnx_data', 'vae_decoder/model.onnx', 'vae_decoder/model.onnx_data'] as const;
-const SIDE = 32;
+const SIDE = 64; // Native 512px output; VAE scale factor is 8.
 
 export async function loadTinyDiffusion(option: ModelOption, runtime: string, cache: Awaited<ReturnType<typeof imageAssetCache>>, report: (progress: ImageProgress) => void) {
   const ort = await import('onnxruntime-web/webgpu');
@@ -21,6 +21,15 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
     await cache.ensure(url(file));
   }
   let reportStage = report;
+  let timings: Record<string, number> = {};
+  const timed = async <T>(label: string, operation: () => Promise<T>): Promise<T> => {
+    const start = performance.now();
+    try { return await operation(); }
+    finally {
+      timings[label] = (performance.now() - start) / 1000;
+      reportStage({ text: `${label}: ${timings[label].toFixed(1)} s`, timings: { ...timings } });
+    }
+  };
   const sessions = new DiffusionSessions(true, async name => {
     const dimensions: Record<string, number> = name === 'unet'
       ? { unet_sample_batch: 1, unet_sample_channels: 4, unet_sample_height: SIDE, unet_sample_width: SIDE, unet_timestep_batch: 1, unet_ehs_batch: 1, unet_ehs_sequence: 77 }
@@ -34,17 +43,17 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
       freeDimensionOverrides: dimensions,
       extra: { session: { disable_prepacking: '1', use_device_allocator_for_initializers: '1' } },
     };
-    return cache.withModelURL(url(`${name}/model.onnx`), modelURL => {
+    return timed(`Load ${name}`, () => cache.withModelURL(url(`${name}/model.onnx`), modelURL => {
       if (name === 'text_encoder') return ort.InferenceSession.create(modelURL, common);
       // The graph declares this exact relative path. Supplying it explicitly
       // prevents ORT from attempting to resolve external weights beside a Blob URL.
       return cache.withModelURL(url(`${name}/model.onnx_data`), weightsURL =>
         ort.InferenceSession.create(modelURL, { ...common, externalData: [{ path: 'model.onnx_data', data: weightsURL }] }));
-    });
+    }));
   });
   return {
     async generate(prompt: string, report: (progress: ImageProgress) => void): Promise<Blob> {
-      reportStage = report;
+      reportStage = report; timings = {};
       const tensors = new Set<import('onnxruntime-web').Tensor>();
       const keep = <T extends import('onnxruntime-web').Tensor>(tensor: T) => { tensors.add(tensor); return tensor; };
       const dispose = (tensor: import('onnxruntime-web').Tensor) => { tensor.dispose(); tensors.delete(tensor); };
@@ -54,7 +63,7 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
           const ids = keep(new ort.Tensor('int32', Int32Array.from(tokenized.input_ids), [1, 77]));
           try {
             report({ text: 'Encoding Tiny SD prompt locally…', progress: .05 });
-            const outputs = await session.run({ input_ids: ids });
+            const outputs = await timed('Prompt encoding', () => session.run({ input_ids: ids }));
             Object.values(outputs).forEach(keep);
             const result = outputs.last_hidden_state;
             if (!result) throw new Error('Tiny SD prompt encoder returned no embedding.');
@@ -72,7 +81,7 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
             const timestep = keep(new ort.Tensor('float32', Float32Array.of(LCM_TIMESTEPS[index]), [1]));
             let outputs: Record<string, import('onnxruntime-web').Tensor> = {};
             try {
-              outputs = await session.run({ sample, timestep, encoder_hidden_states: embedding });
+              outputs = await timed(`Drawing step ${index + 1}`, () => session.run({ sample, timestep, encoder_hidden_states: embedding }));
               Object.values(outputs).forEach(keep);
               if (!outputs.out_sample) throw new Error('Tiny SD drawing network returned no prediction.');
               latent = lcmStep(latent, outputs.out_sample.data as Float32Array, index);
@@ -87,14 +96,14 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
           const input = keep(new ort.Tensor('float32', latent, [1, 4, SIDE, SIDE]));
           try {
             report({ text: 'Decoding Tiny SD image locally…', progress: .85 });
-            const outputs = await session.run({ latent_sample: input });
+            const outputs = await timed('Image decoding', () => session.run({ latent_sample: input }));
             Object.values(outputs).forEach(keep);
             if (!outputs.sample) throw new Error('Tiny SD decoder returned no image.');
             return outputs.sample;
           } finally { dispose(input); }
         });
         const [, channels, height, width] = decoded.dims;
-        if (channels !== 3 || height !== 256 || width !== 256) throw new Error('Tiny SD decoder returned an unexpected image shape.');
+        if (channels !== 3 || height !== SIDE * 8 || width !== SIDE * 8) throw new Error('Tiny SD decoder returned an unexpected image shape.');
         const pixels = decoded.data as Float32Array;
         const rgba = new Uint8ClampedArray(width * height * 4);
         for (let i = 0; i < width * height; i++) {

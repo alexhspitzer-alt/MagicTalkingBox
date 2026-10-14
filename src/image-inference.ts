@@ -1,5 +1,5 @@
-export type ImageProgress = { text: string; progress?: number; tokens?: number; tokensPerSecond?: number };
-export type ImageResult = { blob: Blob; seconds: number };
+export type ImageProgress = { text: string; progress?: number; tokens?: number; tokensPerSecond?: number; timings?: Record<string, number> };
+export type ImageResult = { blob: Blob; seconds: number; timings?: Record<string, number> };
 type Reply = { id: number; type: 'progress'; progress: ImageProgress } | { id: number; type: 'result'; result: ImageResult | undefined } | { id: number; type: 'error'; error: string };
 export class ImageInference {
   private worker?: Worker;

@@ -53,6 +53,7 @@ export class UI {
       picture.src = url; picture.alt = image.prompt; picture.loading = 'lazy';
       const details = document.createElement('p'); details.className = 'hint';
       details.textContent = `${image.model} · ${image.seconds.toFixed(1)} s · ${new Date(image.created).toLocaleString()}`;
+      if (image.timings) details.textContent += ` · ${Object.entries(image.timings).map(([stage, seconds]) => `${stage}: ${seconds.toFixed(1)} s`).join(" · ")}`;
       const download = document.createElement('a'); download.className = 'download';
       download.href = url; download.download = `magic-box-${image.id}.png`; download.textContent = 'Download PNG ↓';
       article.append(caption, picture, details, download); return article;
