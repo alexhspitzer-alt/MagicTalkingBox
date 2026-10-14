@@ -156,7 +156,7 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   await expect(page.locator('#context')).toContainText('512 × 512');
   await page.locator('#model-select').selectOption('tiny-sd-lcm');
   await expect(page.locator('#size')).toContainText('947 MiB');
-  await expect(page.locator('#context')).toContainText('512 × 512');
+  await expect(page.locator('#context')).toContainText('256 × 256');
   await expect(page.locator('#context')).toContainText('4 steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await expect(page.locator('#model-description')).toContainText('Loads one network at a time');
@@ -200,7 +200,7 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
   await page.locator('#mode-select').selectOption('image');
   await page.locator('#model-select').selectOption('tiny-sd-lcm');
   await expect(page.locator('#size')).toContainText('947 MiB');
-  await expect(page.locator('#context')).toContainText('512 × 512');
+  await expect(page.locator('#context')).toContainText('256 × 256');
   await expect(page.locator('#context')).toContainText('4 steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await page.locator('#load').click();

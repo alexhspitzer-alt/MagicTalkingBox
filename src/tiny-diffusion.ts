@@ -6,7 +6,7 @@ import { LCM_TIMESTEPS, lcmStep, normalNoise } from './lcm-scheduler';
 
 export const TINY_REVISION = '3b423c4e1d61d50c56efdde24592862be68c8574';
 export const TINY_FILES = ['text_encoder/model.onnx', 'unet/model.onnx', 'unet/model.onnx_data', 'vae_decoder/model.onnx', 'vae_decoder/model.onnx_data'] as const;
-const SIDE = 64; // Native 512px output; VAE scale factor is 8.
+const SIDE = 32; // 256px output to limit phone activation memory; VAE scale is 8.
 
 export async function loadTinyDiffusion(option: ModelOption, runtime: string, cache: Awaited<ReturnType<typeof imageAssetCache>>, report: (progress: ImageProgress) => void) {
   const ort = await import('onnxruntime-web/webgpu');
