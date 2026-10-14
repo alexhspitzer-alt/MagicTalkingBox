@@ -217,3 +217,10 @@ and decoded pixels now raise errors instead of silently rendering corrupted
 images. Static review found matching tokenizer/padding, dynamic spatial shapes,
 and sampled ONNX weights consistent with the source at float16 precision.
 Full output quality and GPU numerical correctness remain unverified.
+
+Tiny SD offers a Steps number field before Draw, default 8, accepting whole
+numbers 1–50 (the scheduler's original grid has 50 positions). Each request
+builds its own timestep schedule and preserves the working schedule at eight.
+Changing steps does not reload weights; saved images include their step count.
+The field is hidden for text, SD-Turbo's fixed one-step backend, and Janus.
+More steps increase runtime and do not guarantee improved quality.

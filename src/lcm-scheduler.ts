@@ -1,7 +1,13 @@
 // Adapted from Hugging Face Diffusers v0.23.1 LCMScheduler (Apache-2.0).
 // This fixed profile matches the pinned akameswa/lcm-tiny-sd-onnx-fp16 export:
 // scaled-linear betas, epsilon prediction, 50 original steps, no clipping.
-export const LCM_TIMESTEPS = [999, 879, 759, 639, 519, 399, 279, 159] as const;
+export function lcmTimesteps(steps = 8): number[] {
+  if (!Number.isInteger(steps) || steps < 1 || steps > 50) throw new Error('Steps must be a whole number from 1 to 50.');
+  // Match Diffusers v0.23.1 set_timesteps; eight retains the working profile.
+  const stride = Math.floor(50 / steps);
+  return Array.from({ length: steps }, (_, i) => (50 - i * stride) * 20 - 1);
+}
+export const LCM_TIMESTEPS = lcmTimesteps();
 
 const alphas = new Float64Array(1000);
 let product = 1;
@@ -16,15 +22,15 @@ export function normalNoise(count: number): Float32Array {
     Math.sqrt(-2 * Math.log(Math.max(Math.random(), Number.EPSILON))) * Math.cos(2 * Math.PI * Math.random()));
 }
 
-export function lcmStep(sample: Float32Array, prediction: Float32Array, index: number, noise?: Float32Array): Float32Array {
-  if (index < 0 || index >= LCM_TIMESTEPS.length || !Number.isInteger(index)) throw new Error('Invalid LCM step.');
+export function lcmStep(sample: Float32Array, prediction: Float32Array, index: number, noise?: Float32Array, timesteps: readonly number[] = LCM_TIMESTEPS): Float32Array {
+  if (index < 0 || index >= timesteps.length || !Number.isInteger(index)) throw new Error('Invalid LCM step.');
   if (sample.length !== prediction.length) throw new Error('LCM output shape does not match its input.');
-  const timestep = LCM_TIMESTEPS[index];
+  const timestep = timesteps[index];
   const alpha = Math.sqrt(alphas[timestep]), beta = Math.sqrt(1 - alphas[timestep]);
   const scaledTime = timestep * 10;
   const skip = .25 / (scaledTime * scaledTime + .25);
   const out = scaledTime / Math.sqrt(scaledTime * scaledTime + .25);
-  const next = LCM_TIMESTEPS[index + 1];
+  const next = timesteps[index + 1];
   const nextAlpha = next === undefined ? 1 : Math.sqrt(alphas[next]);
   const nextBeta = next === undefined ? 0 : Math.sqrt(1 - alphas[next]);
   const random = next === undefined ? undefined : noise ?? normalNoise(sample.length);

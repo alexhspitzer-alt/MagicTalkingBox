@@ -1,5 +1,6 @@
+export type ImageGenerationOptions = { steps?: number };
 export type ImageProgress = { text: string; progress?: number; tokens?: number; tokensPerSecond?: number; timings?: Record<string, number> };
-export type ImageResult = { blob: Blob; seconds: number; timings?: Record<string, number> };
+export type ImageResult = { blob: Blob; seconds: number; timings?: Record<string, number>; steps?: number };
 type Reply = { id: number; type: 'progress'; progress: ImageProgress } | { id: number; type: 'result'; result: ImageResult | undefined } | { id: number; type: 'error'; error: string };
 export class ImageInference {
   private worker?: Worker;
@@ -31,8 +32,8 @@ export class ImageInference {
     });
     await this.request('load', { model, runtime: new URL(import.meta.env.BASE_URL + 'ort/', location.href).href }, onProgress);
   }
-  async generate(prompt: string, onProgress: (report: ImageProgress) => void): Promise<ImageResult> {
-    const result = await this.request('generate', { prompt }, onProgress);
+  async generate(prompt: string, onProgress: (report: ImageProgress) => void, options: ImageGenerationOptions = {}): Promise<ImageResult> {
+    const result = await this.request('generate', { prompt, options }, onProgress);
     if (!result?.blob) throw new Error('The image model returned no image.');
     return result;
   }

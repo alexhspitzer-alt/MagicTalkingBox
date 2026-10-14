@@ -9,7 +9,7 @@
 </head>
 <body>
   <main>
-    <header><span class="eyebrow">LOCAL AI WORKSTATION · V0.11</span><h1>Magic Talking Box<span class="cursor">_</span></h1><p>Your browser. Your GPU. Your ideas.</p></header>
+    <header><span class="eyebrow">LOCAL AI WORKSTATION · V0.12</span><h1>Magic Talking Box<span class="cursor">_</span></h1><p>Your browser. Your GPU. Your ideas.</p></header>
     <section class="panel" aria-label="Device and model">
       <div class="model-picker"><label for="mode-select">Generate<select id="mode-select"><option value="text">Text / chat</option><option value="image">Image / drawing</option></select></label><label for="model-select">Model<select id="model-select"></select></label></div>
       <p id="model-description" class="hint model-description"></p>
@@ -32,7 +32,7 @@
     <section class="panel terminal" aria-label="Local chat">
       <div class="terminal-head"><span id="terminal-title">CONVERSATION / LOCAL</span><button id="clear" class="secondary">New chat</button></div>
       <div id="messages" aria-label="Conversation" aria-busy="false"><p class="empty">The box is quiet.<br><span>Load the model, then give it something to think about.</span></p></div>
-      <form id="chat"><label class="sr-only" for="prompt">Message</label><textarea id="prompt" rows="3" placeholder="Talk to the box…" disabled></textarea><div class="composer-bottom"><span class="hint">Enter sends · Shift + Enter adds a line</span><div><button id="stop" class="secondary" type="button" hidden>Stop</button><button id="send" disabled>Send ↗</button></div></div></form>
+      <form id="chat"><label id="drawing-settings" class="hint" hidden>Steps <input id="image-steps" type="number" inputmode="numeric" min="1" max="50" step="1" value="8" required disabled /> <span>1–50 · more steps take longer</span></label><label class="sr-only" for="prompt">Message</label><textarea id="prompt" rows="3" placeholder="Talk to the box…" disabled></textarea><div class="composer-bottom"><span class="hint">Enter sends · Shift + Enter adds a line</span><div><button id="stop" class="secondary" type="button" hidden>Stop</button><button id="send" disabled>Send ↗</button></div></div></form>
     </section>
     <footer>Inference stays on this device. Downloads come from Hugging Face and MLC.<br>Keep this tab visible during long generations. Browser storage can be cleared by your device.</footer>
   </main>

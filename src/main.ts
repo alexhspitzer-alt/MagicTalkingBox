@@ -1,3 +1,4 @@
+import { lcmTimesteps } from './lcm-scheduler';
 import './style.css';
 import { detectDevice } from './device';
 import { Inference } from './inference';
@@ -70,6 +71,7 @@ function updateSelection() {
   element('context').textContent = model.context;
   element('model-description').textContent = model.description;
   element('terminal-title').textContent = mode === 'text' ? 'CONVERSATION / LOCAL' : 'IMAGE GALLERY / LOCAL';
+  element('drawing-settings').hidden = model.backend !== 'tiny-lcm';
   element('clear').textContent = mode === 'text' ? 'New chat' : 'Clear gallery';
   element('send').textContent = mode === 'text' ? 'Send ↗' : 'Draw ↗';
   element<HTMLTextAreaElement>('prompt').placeholder = mode === 'text' ? 'Talk to the box…' : 'Describe the image you want to draw…';
@@ -135,6 +137,11 @@ element<HTMLFormElement>('chat').addEventListener('submit', async event => {
   event.preventDefault();
   const prompt = element<HTMLTextAreaElement>('prompt'); const text = prompt.value.trim();
   if (!text || busy || !loaded) return;
+  let steps: number | undefined;
+  if (getModel(selected).backend === 'tiny-lcm') {
+    steps = element<HTMLInputElement>('image-steps').valueAsNumber;
+    try { lcmTimesteps(steps); } catch (error) { ui.error(error); return; }
+  }
   ui.clearError(); stopped = false;
   busy = true; controls(true); ui.status('Generating locally… Slow generations can run as long as they need.');
   element('speed').textContent = 'Measuring…'; prompt.value = '';
@@ -146,8 +153,8 @@ element<HTMLFormElement>('chat').addEventListener('submit', async event => {
       const result = await imageInference.generate(text, report => {
         ui.status(report.text);
         if (report.tokensPerSecond !== undefined) element('speed').textContent = `${report.tokensPerSecond.toFixed(2)} image tokens/s · ${report.tokens} tokens`;
-      });
-      const image: SavedImage = { id: crypto.randomUUID(), prompt: text, model: getModel(selected).name, blob: result.blob, seconds: result.seconds, timings: result.timings, created: Date.now() };
+      }, { steps });
+      const image: SavedImage = { id: crypto.randomUUID(), prompt: text, model: getModel(selected).name, blob: result.blob, seconds: result.seconds, timings: result.timings, steps: result.steps, created: Date.now() };
       images.push(image); ui.renderImages(images);
       element('speed').textContent = `${(60 / Math.max(result.seconds, .001)).toFixed(2)} images/min · ${result.seconds.toFixed(1)} s/image`;
       try { await saveImage(image); ui.status('Ready. Image saved on this device.'); }

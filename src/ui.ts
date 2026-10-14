@@ -18,6 +18,7 @@ export class UI {
     element<HTMLButtonElement>('clear').disabled = busy;
     element<HTMLSelectElement>('mode-select').disabled = busy;
     element<HTMLSelectElement>('model-select').disabled = busy;
+    element<HTMLInputElement>('image-steps').disabled = busy || Boolean(element('drawing-settings').hidden);
     element('stop').hidden = !generating;
     element('messages').setAttribute('aria-busy', String(generating));
   }
@@ -53,6 +54,7 @@ export class UI {
       picture.src = url; picture.alt = image.prompt; picture.loading = 'lazy';
       const details = document.createElement('p'); details.className = 'hint';
       details.textContent = `${image.model} · ${image.seconds.toFixed(1)} s · ${new Date(image.created).toLocaleString()}`;
+      if (image.steps !== undefined) details.textContent += ` · ${image.steps} steps`;
       if (image.timings) details.textContent += ` · ${Object.entries(image.timings).map(([stage, seconds]) => `${stage}: ${seconds.toFixed(1)} s`).join(" · ")}`;
       const download = document.createElement('a'); download.className = 'download';
       download.href = url; download.download = `magic-box-${image.id}.png`; download.textContent = 'Download PNG ↓';

@@ -2,12 +2,12 @@ import { loadDiffusion } from './diffusion';
 import { loadTinyDiffusion } from './tiny-diffusion';
 import { getModel, type ModelOption } from './model';
 import { imageAssetCache } from './image-cache';
-import type { ImageProgress, ImageResult } from './image-inference';
+import type { ImageProgress, ImageResult, ImageGenerationOptions } from './image-inference';
 
-type Backend = { generate: (prompt: string, report: (progress: ImageProgress) => void) => Promise<Blob> };
+type Backend = { generate: (prompt: string, report: (progress: ImageProgress) => void, options?: ImageGenerationOptions) => Promise<Blob> };
 let backend: Backend | undefined;
 let running = false;
-self.onmessage = async (event: MessageEvent<{ id: number; type: string; model?: string; prompt?: string; runtime?: string }>) => {
+self.onmessage = async (event: MessageEvent<{ id: number; type: string; model?: string; prompt?: string; runtime?: string; options?: ImageGenerationOptions }>) => {
   const { id, type } = event.data;
   const report = (progress: ImageProgress) => self.postMessage({ id, type: 'progress', progress });
   if (running) { self.postMessage({ id, type: 'error', error: 'The image worker is already busy.' }); return; }
@@ -45,8 +45,8 @@ self.onmessage = async (event: MessageEvent<{ id: number; type: string; model?: 
       const blob = await backend.generate(event.data.prompt!, progress => {
         if (progress.timings) timings = progress.timings;
         report(progress);
-      });
-      result = { blob, seconds: (performance.now() - start) / 1000, timings };
+      }, event.data.options);
+      result = { blob, seconds: (performance.now() - start) / 1000, timings, steps: event.data.options?.steps };
     } else throw new Error(`Unknown image operation: ${type}`);
     self.postMessage({ id, type: 'result', result });
   } catch (error) {

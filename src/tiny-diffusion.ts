@@ -1,8 +1,8 @@
 import type { ModelOption } from './model';
 import type { imageAssetCache } from './image-cache';
-import type { ImageProgress } from './image-inference';
+import type { ImageProgress, ImageGenerationOptions } from './image-inference';
 import { DiffusionSessions } from './diffusion-sessions';
-import { LCM_TIMESTEPS, lcmStep, normalNoise, guidedPrediction } from './lcm-scheduler';
+import { lcmTimesteps, lcmStep, normalNoise, guidedPrediction } from './lcm-scheduler';
 
 export const TINY_REVISION = '3b423c4e1d61d50c56efdde24592862be68c8574';
 export const TINY_FILES = ['text_encoder/model.onnx', 'unet/model.onnx', 'unet/model.onnx_data', 'vae_decoder/model.onnx', 'vae_decoder/model.onnx_data'] as const;
@@ -52,7 +52,8 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
     }));
   });
   return {
-    async generate(prompt: string, report: (progress: ImageProgress) => void): Promise<Blob> {
+    async generate(prompt: string, report: (progress: ImageProgress) => void, options: ImageGenerationOptions = {}): Promise<Blob> {
+      const timesteps = lcmTimesteps(options.steps ?? 8);
       reportStage = report; timings = {};
       const tensors = new Set<import('onnxruntime-web').Tensor>();
       const keep = <T extends import('onnxruntime-web').Tensor>(tensor: T) => { tensors.add(tensor); return tensor; };
@@ -78,9 +79,9 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
         // Retain one UNet across all steps. CFG uses sequential batch-one
         // predictions, never the batch-two allocation that failed on the phone.
         await sessions.use('unet', async session => {
-          for (let index = 0; index < LCM_TIMESTEPS.length; index++) {
+          for (let index = 0; index < timesteps.length; index++) {
             const sample = keep(new ort.Tensor('float32', latent, [1, 4, SIDE, SIDE]));
-            const timestep = keep(new ort.Tensor('float32', Float32Array.of(LCM_TIMESTEPS[index]), [1]));
+            const timestep = keep(new ort.Tensor('float32', Float32Array.of(timesteps[index]), [1]));
             const predict = async (embedding: import('onnxruntime-web').Tensor) => {
               const outputs = await session.run({ sample, timestep, encoder_hidden_states: embedding });
               Object.values(outputs).forEach(keep);
@@ -92,11 +93,11 @@ export async function loadTinyDiffusion(option: ModelOption, runtime: string, ca
               } finally { Object.values(outputs).forEach(dispose); }
             };
             try {
-              report({ text: `Drawing Tiny SD locally: step ${index + 1} / ${LCM_TIMESTEPS.length} · sequential prompt guidance…`, progress: .15 + index / LCM_TIMESTEPS.length * .6 });
+              report({ text: `Drawing Tiny SD locally: step ${index + 1} / ${timesteps.length} · sequential prompt guidance…`, progress: .15 + index / timesteps.length * .6 });
               latent = await timed(`Drawing step ${index + 1}`, async () => {
                 const conditional = await predict(embeddings.conditional);
                 const unconditional = await predict(embeddings.unconditional);
-                return lcmStep(latent, guidedPrediction(conditional, unconditional), index);
+                return lcmStep(latent, guidedPrediction(conditional, unconditional), index, undefined, timesteps);
               });
               if (!latent.every(Number.isFinite)) throw new Error('Tiny SD scheduler produced non-finite latents.');
             } finally { dispose(sample); dispose(timestep); }
