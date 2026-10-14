@@ -1,7 +1,7 @@
 // Adapted from Hugging Face Diffusers v0.23.1 LCMScheduler (Apache-2.0).
 // This fixed profile matches the pinned akameswa/lcm-tiny-sd-onnx-fp16 export:
 // scaled-linear betas, epsilon prediction, 50 original steps, no clipping.
-export const LCM_TIMESTEPS = [999, 759, 519, 279] as const;
+export const LCM_TIMESTEPS = [999, 879, 759, 639, 519, 399, 279, 159] as const;
 
 const alphas = new Float64Array(1000);
 let product = 1;
@@ -32,5 +32,15 @@ export function lcmStep(sample: Float32Array, prediction: Float32Array, index: n
   return Float32Array.from(sample, (value, i) => {
     const denoised = out * (value - beta * prediction[i]) / alpha + skip * value;
     return nextAlpha * denoised + nextBeta * (random?.[i] ?? 0);
+  });
+}
+
+// CFG is evaluated in two sequential batch-one calls to limit GPU memory.
+export function guidedPrediction(conditional: Float32Array, unconditional: Float32Array, scale = 2): Float32Array {
+  if (conditional.length !== unconditional.length) throw new Error('Guidance output shapes differ.');
+  return Float32Array.from(conditional, (value, index) => {
+    const guided = unconditional[index] + scale * (value - unconditional[index]);
+    if (!Number.isFinite(guided)) throw new Error('Drawing network produced non-finite values.');
+    return guided;
   });
 }

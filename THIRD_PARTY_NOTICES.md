@@ -36,7 +36,7 @@ https://github.com/huggingface/diffusers/blob/v0.23.1/src/diffusers/schedulers/s
 Copyright 2023 Stanford University Team and The HuggingFace Team.
 Licensed under the Apache License, Version 2.0.
 Changes: TypeScript implementation restricted to the pinned Tiny SD model's
-scaled-linear beta schedule, epsilon prediction, four steps, no clipping.
+scaled-linear beta schedule, epsilon prediction, eight steps, no clipping.
 
 
                                  Apache License

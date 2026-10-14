@@ -30,7 +30,7 @@ saved images; New chat removes the saved conversation. Neither deletes weights.
 | Text | Llama 3.2 3B Instruct | 1,724 MiB | 4,096 tokens |
 | Text | Llama 3.2 3B, lower memory (q4f16) | 1,724 MiB | 2,048 tokens |
 | Text | Qwen2.5 7B Instruct | 4,086 MiB | 4,096 tokens |
-| Image | Tiny SD LCM, smaller memory | ~947 MiB | 256 × 256; four LCM steps |
+| Image | Tiny SD LCM, smaller memory | ~947 MiB | 256 × 256; eight guided LCM steps |
 | Image | Stable Diffusion Turbo (default) | 2.34 GiB | 512 × 512; one diffusion step |
 | Image | Stable Diffusion Turbo, low memory | Same shared 2.34 GiB | 256 × 256; one network at a time |
 | Image | Janus Pro 1B | 2.13 GiB | 384 × 384; 576 image tokens |
@@ -91,9 +91,9 @@ Segmind Tiny SD and an LCM adapter. The pinned ONNX export is
 Its drawing weights are 646,809,600 bytes (~617 MiB), approximately 63% smaller
 than SD-Turbo's UNet. The text-to-image files total ~947 MiB; VAE encoder files
 are not downloaded. This is a separate cache; existing SD-Turbo downloads remain.
-The pipeline draws at 256 × 256 to limit activation memory on phones, using the model author's four-step/guidance-1
-recipe, the export's scaled-linear/epsilon LCM schedule, and SD 1.5 latent scaling.
-The encoder, UNet (all four steps), and decoder run in sequence with CPU stage
+The pipeline draws at 256 × 256 to limit activation memory on phones, using an experimental eight-step/guidance-2
+profile, the export's scaled-linear/epsilon LCM schedule, and SD 1.5 latent scaling.
+The encoder, UNet (all eight steps), and decoder run in sequence with CPU stage
 outputs; each network is released before the next starts. External ONNX data
 files are cached and passed explicitly to ORT, including during offline loading.
 Float16 GPU support is required. Smaller weights improve the prospect of fitting
@@ -199,7 +199,7 @@ model reload without generation. These harness time limits do not apply to the a
 Each model retains its publisher's license; follow the linked model cards.
 
 Tiny SD image history includes separate network-loading and computation timings
-for the prompt encoder, all four drawing steps, and decoder. Timings measure
+for the prompt encoder, all eight guided drawing steps, and decoder. Timings measure
 wall-clock seconds, not GPU utilization or memory usage. The 512 × 512 trial caused browser crashes on the target phone during the first
 drawing pass, so output returns to 256 × 256. Weight downloads and cache URLs
 are unchanged, and stage timings remain available.
@@ -208,3 +208,12 @@ Online page navigation checks the server for a fresh app shell, falling back to
 the installed page offline. App installation bypasses stale HTTP cache entries;
 service-worker script updates also bypass HTTP caching. Model caches are separate
 and remain intact when the app updates.
+
+The original four-step/guidance-1 profile completed on the phone but produced
+poor results. The guided profile uses conditional and unconditional predictions
+in separate batch-one calls, then combines them with CFG scale 2. It increases
+computation without doubling the UNet batch. Non-finite predictions, latents,
+and decoded pixels now raise errors instead of silently rendering corrupted
+images. Static review found matching tokenizer/padding, dynamic spatial shapes,
+and sampled ONNX weights consistent with the source at float16 precision.
+Full output quality and GPU numerical correctness remain unverified.

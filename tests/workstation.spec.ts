@@ -157,7 +157,7 @@ test('model menus switch modes without downloading weights', async ({ page }) =>
   await page.locator('#model-select').selectOption('tiny-sd-lcm');
   await expect(page.locator('#size')).toContainText('947 MiB');
   await expect(page.locator('#context')).toContainText('256 × 256');
-  await expect(page.locator('#context')).toContainText('4 steps');
+  await expect(page.locator('#context')).toContainText('8 guided steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await expect(page.locator('#model-description')).toContainText('Loads one network at a time');
   await expect(page.locator('#size')).toContainText('shared SD-Turbo cache');
@@ -201,7 +201,7 @@ test('image UI saves PNGs, restores offline, and releases the worker on model sw
   await page.locator('#model-select').selectOption('tiny-sd-lcm');
   await expect(page.locator('#size')).toContainText('947 MiB');
   await expect(page.locator('#context')).toContainText('256 × 256');
-  await expect(page.locator('#context')).toContainText('4 steps');
+  await expect(page.locator('#context')).toContainText('8 guided steps');
   await page.locator('#model-select').selectOption('sd-turbo-low-memory');
   await page.locator('#load').click();
   await expect(page.locator('#send')).toBeEnabled();
@@ -292,8 +292,8 @@ test('online reload replaces a stale offline shell and preserves model cache', a
     await (await caches.open('magic-box-image-models-v1')).put('https://huggingface.co/test/preserved-model', new Response('cached weights'));
   });
   await page.reload();
-  await expect(page.locator('.eyebrow')).toContainText('V0.10');
+  await expect(page.locator('.eyebrow')).toContainText('V0.11');
   expect(await page.evaluate(async () => Boolean(await (await caches.open('magic-box-image-models-v1')).match('https://huggingface.co/test/preserved-model')))).toBe(true);
   await context.setOffline(true); await page.reload();
-  await expect(page.locator('.eyebrow')).toContainText('V0.10');
+  await expect(page.locator('.eyebrow')).toContainText('V0.11');
 });
